@@ -3,37 +3,21 @@ import type { Route } from "./+types/home";
 import Navbar from "./navbar";
 import MainContent from "./maincontent";
 import BookRide from "./bookride";
+import { LOCATIONS } from "../data/mockData";
+import { getApplications } from "../data/driverStore";
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "FlowFund" },
+    { title: "RUN Transport" },
     {
       name: "description",
-      content: "Welcome to React Router!",
+      content: "Book a campus ride with RUN Transport.",
     },
   ];
 }
 
-const LOCATIONS = [
-  "Main Gate",
-  "Library Block",
-  "Dining Hall",
-  "School Clinic",
-  "Engineering Hostel",
-  "Engineering Faculty",
-  "Field",
-  "Auditorium",
-  "FBMS",
-  "Law Faculty",
-  "Container",
-  "DP",
-  "Numbers",
-  "Foodmart",
-  "Prophet Moses Extension",
-];
-
 export default function Home() {
-  const [step, setStep] = useState<"idle" | "selecting" | "active">("idle");
+  const [step, setStep] = useState<"idle" | "selecting" | "active" | "payment">("idle");
   const [eta, setEta] = useState(5);
   const [progress, setProgress] = useState(30);
   const [pickup, setPickup] = useState("");
@@ -41,6 +25,10 @@ export default function Home() {
   const [pickupFocus, setPickupFocus] = useState(false);
   const [dropoffFocus, setDropoffFocus] = useState(false);
   const [vehicle, setVehicle] = useState("bus");
+  const [selectedDriver, setSelectedDriver] = useState<string | null>(null);
+
+  // Get approved drivers from fleet review store
+  const approvedDrivers = getApplications().filter((d) => d.status === "approved");
 
   const filteredPickup = pickup
     ? LOCATIONS.filter((l) =>
@@ -67,7 +55,10 @@ export default function Home() {
     setPickup("");
     setDropoff("");
     setProgress(30);
+    setSelectedDriver(null);
   };
+
+  const goToPayment = () => setStep("payment");
 
   return (
     <div
@@ -80,7 +71,7 @@ export default function Home() {
       <Navbar />
 
       <MainContent
-        step={step}
+        step={step === "payment" ? "active" : step}
         eta={eta}
       />
 
@@ -104,6 +95,10 @@ export default function Home() {
         eta={eta}
         progress={progress}
         endRide={endRide}
+        approvedDrivers={approvedDrivers}
+        selectedDriver={selectedDriver}
+        setSelectedDriver={setSelectedDriver}
+        goToPayment={goToPayment}
       />
     </div>
   );

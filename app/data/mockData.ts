@@ -15,11 +15,33 @@ export const VEHICLES = [
 ];
 
 export const LOCATIONS = [
-  "Main Dormitory (Block A)", "Main Dormitory (Block B)", "Female Hostel",
-  "Male Hostel", "Academic Block A", "Academic Block B", "Science Lab Complex",
-  "Library Block", "Chapel & Assembly Hall", "Sports Complex",
-  "School Clinic", "Main Gate / Visitor Entrance", "Admin Block",
-  "Dining Hall", "Staff Quarters",
+  // Hostels
+  "Main Hostel Prophet Moses",
+  "Engineering Hostel (Male)",
+  "Queen Esther Hall",
+  "Numbers Hostel",
+  "Engineering Hostel (Female)",
+  "Postgraduate Quarters",
+  "Prophet Moses Extension",
+  // Cafeterias & Food
+  "Manna Palace",
+  "New Era",
+  "Foodmart",
+  // Academic & Facilities
+  "Auditorium",
+  "LR",
+  "ICT LAB",
+  "Academic Block A",
+  "Academic Block B",
+  "Science Lab Complex",
+  "Library Block",
+  "Chapel & Assembly Hall",
+  "Sports Complex",
+  "School Clinic",
+  "Main Gate / Visitor Entrance",
+  "Admin Block",
+  "Dining Hall",
+  "Staff Quarters",
 ];
 
 export const NIGERIAN_BANKS = [

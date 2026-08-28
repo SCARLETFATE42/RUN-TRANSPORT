@@ -1,4 +1,4 @@
-import type { Route } from "./+types/home";
+import type { Route } from "./+types/mytrips";
 import { TRIPS } from "../data/mockData";
 import Navbar from "./navbar";
 
