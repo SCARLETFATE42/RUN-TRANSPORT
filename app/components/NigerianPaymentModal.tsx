@@ -23,7 +23,7 @@ const USSD_CODES: Record<string, string> = {
 export default function NigerianPaymentModal({
   isOpen,
   onClose,
-  defaultAmount = "2500",
+  defaultAmount = "200",
   onSuccess,
 }: NigerianPaymentModalProps) {
   const [amount, setAmount] = useState(defaultAmount);

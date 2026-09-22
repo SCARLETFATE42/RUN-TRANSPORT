@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Route } from "./+types/home";
 import type { DriverApplication } from "../data/driverStore";
-import { formatFare, getVehiclePrice } from "../data/mockdata"; // ⬅ adjust path if needed
+import { formatFare, getVehiclePrice } from "../data/mockData";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -107,7 +107,14 @@ export default function BookRide({
   useEffect(() => {
     if (step !== "active") return;
     const id = setInterval(() => {
-      setRemainingSeconds((s) => Math.max(0, s - 1));
+      setRemainingSeconds((s) => {
+        if (s <= 1) {
+          clearInterval(id);
+          setTimeout(() => goToPayment(), 600);
+          return 0;
+        }
+        return s - 1;
+      });
     }, 1000);
     return () => clearInterval(id);
   }, [step]);
@@ -369,7 +376,21 @@ export default function BookRide({
                   </div>
                 )}
 
-                <p className="text-xs mb-3" style={{ color: "var(--color-muted)" }}>Select your bank app to complete payment:</p>
+                {/* Direct Flutterwave Checkout */}
+                <button
+                  onClick={goToPayment}
+                  className="w-full py-3 mb-4 rounded-xl text-xs font-bold text-white shadow-lg cursor-pointer transition-all flex items-center justify-center gap-2 hover:opacity-90"
+                  style={{
+                    background: "linear-gradient(135deg, #FF6A00, #FFB400)",
+                    boxShadow: "0 4px 16px rgba(255,106,0,0.35)",
+                    border: "1px solid rgba(255,106,0,0.3)",
+                  }}
+                >
+                  <span className="w-5 h-5 rounded-md bg-white/20 flex items-center justify-center font-black">⚡</span>
+                  <span>Pay with Flutterwave (Card, Transfer, USSD, OPay)</span>
+                </button>
+
+                <p className="text-xs mb-3" style={{ color: "var(--color-muted)" }}>Or pay directly using your mobile bank app:</p>
 
                 <div className="grid grid-cols-3 gap-2 mb-4">
                   {BANK_APPS.map((bank) => (

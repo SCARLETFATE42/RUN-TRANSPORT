@@ -7,6 +7,8 @@ export interface UserProfile {
   bio?: string;
   avatarInitials: string;
   avatarGradient: string;
+  avatarUrl?: string;
+  role: "student" | "driver" | "authority";
   phone: string;
   guardianName: string;
   guardianPhone: string;
@@ -43,6 +45,8 @@ export const DEFAULT_PROFILE: UserProfile = {
   bio: "Student Developer & Campus Tech Enthusiast 💻",
   avatarInitials: "TF",
   avatarGradient: "linear-gradient(135deg, #1d4ed8, #60a5fa)",
+  avatarUrl: undefined,
+  role: "student",
   phone: "0812 345 6789",
   guardianName: "Mrs. Fashola",
   guardianPhone: "0803 456 7890",
@@ -95,4 +99,38 @@ export function addCredits(amount: number): UserProfile {
   };
   saveProfile(updated);
   return updated;
+}
+
+export function updateAvatarImage(avatarUrl: string): UserProfile {
+  const current = getProfile();
+  const updated: UserProfile = {
+    ...current,
+    avatarUrl,
+  };
+  saveProfile(updated);
+  return updated;
+}
+
+export function removeAvatarImage(): UserProfile {
+  const current = getProfile();
+  const updated: UserProfile = {
+    ...current,
+    avatarUrl: undefined,
+  };
+  saveProfile(updated);
+  return updated;
+}
+
+export function setCurrentRole(role: "student" | "driver" | "authority"): UserProfile {
+  const current = getProfile();
+  const updated: UserProfile = {
+    ...current,
+    role,
+  };
+  saveProfile(updated);
+  return updated;
+}
+
+export function getCurrentRole(): "student" | "driver" | "authority" {
+  return getProfile().role || "student";
 }

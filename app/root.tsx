@@ -31,6 +31,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <Meta />
         <Links />
+        {/* Flutterwave inline checkout JS */}
+        <script src="https://checkout.flutterwave.com/v3.js" async />
       </head>
       <body>
         {children}

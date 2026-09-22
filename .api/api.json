@@ -1,0 +1,14 @@
+{
+  "$schema": "https://unpkg.com/api@7/schema.json",
+  "apis": [
+    {
+      "private": true,
+      "identifier": "flutterwavedoc",
+      "source": "@flutterwavedoc/v3.0.0#l74i2hmcmsztbl4v",
+      "integrity": "sha512-4abfKJdIPCxot1maH1xVI8eI3Ng8adUDKUeL3uvEeN/OD7tEdh9Alcod3/E7yvliMJJMnibA6O5TtYOvLvivRw==",
+      "installerVersion": "7.0.2",
+      "language": "js",
+      "createdAt": "2026-09-17T06:59:02.144Z"
+    }
+  ]
+}

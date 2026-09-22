@@ -124,13 +124,17 @@ export default function CustomizeProfile() {
 
             <div className="flex items-start sm:items-center gap-4">
               <div
-                className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-bold shadow-lg transition-all shrink-0"
+                className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-bold shadow-lg transition-all shrink-0 overflow-hidden border border-white/10"
                 style={{
                   background: profile.avatarGradient,
                   color: "#fff",
                 }}
               >
-                {profile.avatarInitials || "TF"}
+                {profile.avatarUrl ? (
+                  <img src={profile.avatarUrl} alt="Preview" className="w-full h-full object-cover" />
+                ) : (
+                  profile.avatarInitials || "TF"
+                )}
               </div>
 
               <div className="flex-1 min-w-0">
@@ -240,6 +244,84 @@ export default function CustomizeProfile() {
                       </span>
                     </button>
                   ))}
+                </div>
+              </div>
+
+              {/* Custom Image Upload of Choice */}
+              <div className="p-4 rounded-xl bg-black/30 border border-white/10 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="block text-xs font-semibold text-white">
+                      Custom Profile Photo of Your Choice
+                    </label>
+                    <p className="text-[11px] text-gray-400">
+                      Upload any picture from your device or specify an image URL.
+                    </p>
+                  </div>
+                  {profile.avatarUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setProfile({ ...profile, avatarUrl: undefined })}
+                      className="text-xs text-red-400 hover:underline cursor-pointer"
+                    >
+                      Reset to Initials
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] text-gray-400 mb-1">Upload File</label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = (event) => {
+                          const img = new Image();
+                          img.onload = () => {
+                            const canvas = document.createElement("canvas");
+                            const maxDim = 320;
+                            let w = img.width;
+                            let h = img.height;
+                            if (w > h) {
+                              if (w > maxDim) {
+                                h = Math.round((h * maxDim) / w);
+                                w = maxDim;
+                              }
+                            } else {
+                              if (h > maxDim) {
+                                w = Math.round((w * maxDim) / h);
+                                h = maxDim;
+                              }
+                            }
+                            canvas.width = w;
+                            canvas.height = h;
+                            const ctx = canvas.getContext("2d");
+                            ctx?.drawImage(img, 0, 0, w, h);
+                            const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+                            setProfile({ ...profile, avatarUrl: dataUrl });
+                          };
+                          img.src = event.target?.result as string;
+                        };
+                        reader.readAsDataURL(file);
+                      }}
+                      className="w-full text-xs text-gray-400 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-500 cursor-pointer"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] text-gray-400 mb-1">Or Photo URL</label>
+                    <input
+                      type="url"
+                      placeholder="https://images.unsplash.com/..."
+                      value={profile.avatarUrl || ""}
+                      onChange={(e) => setProfile({ ...profile, avatarUrl: e.target.value })}
+                      className="w-full px-3 py-1.5 rounded-lg bg-black/40 border border-white/10 text-xs text-white focus:border-blue-500 outline-none"
+                    />
+                  </div>
                 </div>
               </div>
 

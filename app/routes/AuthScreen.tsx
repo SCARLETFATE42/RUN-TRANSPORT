@@ -18,14 +18,18 @@ export default function AuthScreen() {
 
   const navigate = useNavigate();
 
-const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-  e.preventDefault();
-  navigate("/home");
-};
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    navigate("/select-role");
+  };
 
-const handleGoogleLogin = async () => {
-  navigate("/home");
-};
+  const handleGoogleLogin = async () => {
+    navigate("/select-role");
+  };
+
+  const handleAppleLogin = async () => {
+    navigate("/select-role");
+  };
 
   return (
     <div
@@ -93,7 +97,9 @@ const handleGoogleLogin = async () => {
 
           {/* Apple */}
           <button
-            className="w-full flex items-center justify-center gap-3 py-3 rounded-xl transition-all hover:opacity-90"
+            type="button"
+            onClick={handleAppleLogin}
+            className="w-full flex items-center justify-center gap-3 py-3 rounded-xl transition-all hover:opacity-90 cursor-pointer"
             style={{
               background: "var(--color-surface-2)",
               border: "1px solid var(--color-border)",
