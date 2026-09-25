@@ -1,39 +1,17 @@
-import { useState } from "react";
-import { data } from "react-router";
+import { useEffect, useRef, useState } from "react";
 import type { Route } from "./+types/home";
-import { createClient } from "~/utils/supabase.server";
 import Navbar from "./navbar";
 import MainContent from "./maincontent";
 import BookRide from "./bookride";
-import PaystackCheckout from "../components/PaystackCheckout";
 import FlutterwaveCheckout from "../components/FlutterwaveCheckout";
 import { LOCATIONS, getVehiclePrice } from "../data/mockData";
 import { getApplications } from "../data/driverStore";
-
-type SupabaseTodo = {
-  id: string | number;
-  name?: string | null;
-  title?: string | null;
-  task?: string | null;
-};
-
-export async function loader({ request }: Route.LoaderArgs) {
-  const { supabase, headers } = createClient(request);
-  const { data: todos, error } = await supabase.from("todos").select();
-
-  if (error) {
-    console.error("Unable to load Supabase todos:", error.message);
-  }
-
-  return data(
-    { todos: (todos ?? []) as SupabaseTodo[] },
-    { headers },
-  );
-}
-
-export function headers({ loaderHeaders }: Route.HeadersArgs) {
-  return loaderHeaders;
-}
+import {
+  cancelTrip,
+  completeTrip,
+  createTrip,
+  getActiveTrip,
+} from "../data/tripStore";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -45,46 +23,25 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
-function SupabaseTodoList({ todos }: { todos: SupabaseTodo[] }) {
-  if (todos.length === 0) return null;
-
-  return (
-    <section
-      aria-label="Supabase todos"
-      className="fixed right-4 top-4 z-40 w-72 rounded-2xl border bg-slate-950/90 p-4 text-white shadow-2xl backdrop-blur-md"
-      style={{ borderColor: "rgba(255,255,255,0.12)" }}
-    >
-      <h2 className="mb-3 text-sm font-semibold">Supabase Todos</h2>
-      <ul className="space-y-2 text-sm">
-        {todos.map((todo) => (
-          <li
-            key={todo.id}
-            className="rounded-xl border border-white/10 bg-white/5 px-3 py-2"
-          >
-            {todo.name ?? todo.title ?? todo.task ?? `Todo ${todo.id}`}
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-export default function Home({ loaderData }: Route.ComponentProps) {
+export default function Home() {
   const [step, setStep] = useState<"idle" | "selecting" | "active" | "payment">("idle");
   const [eta, setEta] = useState(4);
   const [progress, setProgress] = useState(30);
-  const [pickup, setPickup] = useState("Main Hostel Prophet Moses");
-  const [dropoff, setDropoff] = useState("Library Block");
+  const [pickup, setPickup] = useState("");
+  const [dropoff, setDropoff] = useState("");
   const [pickupFocus, setPickupFocus] = useState(false);
   const [dropoffFocus, setDropoffFocus] = useState(false);
   const [vehicle, setVehicle] = useState("School Sedan");
   const [selectedDriver, setSelectedDriver] = useState<string | null>(null);
   const [showPaystackModal, setShowPaystackModal] = useState(false);
+  const activeTripIdRef = useRef<string | null>(null);
+  const paymentConfirmedRef = useRef(false);
 
   // Get approved drivers from fleet review store
   const approvedDrivers = getApplications().filter((d) => d.status === "approved");
   const activeDriver =
     approvedDrivers.find((d) => d.id === selectedDriver) || approvedDrivers[0];
+  const fareNaira = activeDriver ? getVehiclePrice(activeDriver.vehicleType) : 200;
 
   const filteredPickup = pickup
     ? LOCATIONS.filter((l) =>
@@ -98,18 +55,63 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       )
     : LOCATIONS;
 
+  useEffect(() => {
+    const activeTrip = getActiveTrip();
+    if (!activeTrip) return;
+
+    activeTripIdRef.current = activeTrip.id;
+    setPickup(activeTrip.pickup);
+    setDropoff(activeTrip.dropoff);
+    setVehicle(activeTrip.vehicle);
+    setSelectedDriver(activeTrip.driverApplicationId ?? null);
+    setEta(activeTrip.estimatedDurationMinutes);
+    setProgress(5);
+    setStep("active");
+  }, []);
+
   const startBooking = () => setStep("selecting");
 
   const confirmRide = () => {
+    if (activeTripIdRef.current) return;
+
+    const staleActiveTrip = getActiveTrip();
+    if (staleActiveTrip) cancelTrip(staleActiveTrip.id);
+
+    const trip = createTrip({
+      pickup: pickup.trim(),
+      dropoff: dropoff.trim(),
+      driverName: activeDriver?.fullName || "Assigned driver",
+      driverApplicationId: activeDriver?.id,
+      vehicle: activeDriver?.vehicleType || vehicle,
+      fareNaira,
+      estimatedDurationMinutes: eta,
+    });
+    activeTripIdRef.current = trip.id;
+    paymentConfirmedRef.current = false;
     setStep("active");
     setEta(4);
     setProgress(5);
   };
 
-  const endRide = () => {
+  const resetRide = () => {
+    activeTripIdRef.current = null;
+    paymentConfirmedRef.current = false;
+    setShowPaystackModal(false);
     setStep("idle");
     setProgress(15);
     setSelectedDriver(null);
+  };
+
+  const cancelRide = () => {
+    if (activeTripIdRef.current) cancelTrip(activeTripIdRef.current);
+    resetRide();
+  };
+
+  const completeUnverifiedRide = () => {
+    if (activeTripIdRef.current) {
+      completeTrip(activeTripIdRef.current, { status: "unverified" });
+    }
+    resetRide();
   };
 
   const goToPayment = () => {
@@ -122,9 +124,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     setShowPaystackModal(true);
     setStep("payment");
   };
-
-  const fareNaira = activeDriver ? getVehiclePrice(activeDriver.vehicleType) : 200;
-  const todos = loaderData.todos;
 
   return (
     <div
@@ -139,8 +138,8 @@ export default function Home({ loaderData }: Route.ComponentProps) {
       <MainContent
         step={step === "payment" ? "active" : step}
         eta={eta}
-        pickup={pickup || "Main Hostel Prophet Moses"}
-        dropoff={dropoff || "Library Block"}
+        pickup={pickup}
+        dropoff={dropoff}
         driverName={activeDriver?.fullName || "Mr. Balogun"}
         vehicleType={activeDriver?.vehicleType || vehicle}
         onDestinationReached={handleDestinationReached}
@@ -165,21 +164,24 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         confirmRide={confirmRide}
         eta={eta}
         progress={progress}
-        endRide={endRide}
+        cancelRide={cancelRide}
+        completeRide={completeUnverifiedRide}
         approvedDrivers={approvedDrivers}
         selectedDriver={selectedDriver}
         setSelectedDriver={setSelectedDriver}
         goToPayment={goToPayment}
       />
 
-      <SupabaseTodoList todos={todos} />
-
       {/* Flutterwave Checkout Modal — automatically triggered on arrival */}
       <FlutterwaveCheckout
         isOpen={showPaystackModal}
         onClose={() => {
+          if (paymentConfirmedRef.current) {
+            resetRide();
+            return;
+          }
           setShowPaystackModal(false);
-          endRide();
+          setStep("active");
         }}
         amountNaira={fareNaira}
         driverName={activeDriver?.fullName || "Sunday Balogun"}
@@ -188,9 +190,15 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         driverAccount={activeDriver?.accountNumber || "0123984712"}
         pickupLocation={pickup}
         dropoffLocation={dropoff}
-        onPaymentSuccess={() => {
-          setShowPaystackModal(false);
-          endRide();
+        onPaymentSuccess={(reference, amount) => {
+          if (activeTripIdRef.current) {
+            completeTrip(activeTripIdRef.current, {
+              status: "paid",
+              reference,
+              fareNaira: amount,
+            });
+          }
+          paymentConfirmedRef.current = true;
         }}
       />
     </div>

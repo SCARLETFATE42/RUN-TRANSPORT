@@ -103,7 +103,10 @@ async function loadFlutterwaveScript(): Promise<void> {
   if (existingScript) {
     await new Promise<void>((resolve, reject) => {
       const timeout = window.setTimeout(
-        () => reject(new Error("Flutterwave script load timed out.")),
+        () => {
+          window.clearInterval(check);
+          reject(new Error("Flutterwave script load timed out."));
+        },
         10000,
       );
 
@@ -145,6 +148,7 @@ async function verifyFlutterwavePayment(
 ): Promise<VerifyResponse> {
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
   const supabaseAnonKey = (
+    import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ??
     import.meta.env.VITE_SUPABASE_ANON_KEY ??
     import.meta.env.VITE_SUPABASE_KEY
   ) as string | undefined;
@@ -155,7 +159,7 @@ async function verifyFlutterwavePayment(
 
   if (!supabaseAnonKey) {
     throw new Error(
-      "VITE_SUPABASE_ANON_KEY (or VITE_SUPABASE_KEY) is missing from your .env file.",
+      "VITE_SUPABASE_PUBLISHABLE_KEY (or VITE_SUPABASE_ANON_KEY) is missing from your .env file.",
     );
   }
 

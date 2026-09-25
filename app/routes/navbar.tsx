@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { NavLink, useNavigate } from "react-router";
 import {
+  canUseAuthorityRole,
   getProfile,
   setCurrentRole,
   type UserProfile,
@@ -35,8 +36,14 @@ export default function Navbar({ onReplaySplash }: NavbarProps = {}) {
   };
 
   const currentRole = profile.role || "student";
+  const authorityAccess = canUseAuthorityRole(profile);
 
   const handleQuickSwitchRole = (newRole: "student" | "driver" | "authority") => {
+    if (newRole === "authority" && !authorityAccess) {
+      setShowRoleMenu(false);
+      return;
+    }
+
     setCurrentRole(newRole);
     refreshProfile();
     setShowRoleMenu(false);
@@ -96,7 +103,7 @@ export default function Navbar({ onReplaySplash }: NavbarProps = {}) {
 
   return (
     <aside
-      className="flex flex-col w-64 shrink-0 border-r"
+      className="flex w-16 shrink-0 flex-col border-r md:w-64"
       style={{
         background: "var(--color-surface)",
         borderColor: "var(--color-border)",
@@ -104,17 +111,17 @@ export default function Navbar({ onReplaySplash }: NavbarProps = {}) {
     >
       {/* Logo & Header */}
       <div
-        className="flex items-center gap-3 px-5 py-5 border-b"
+        className="flex items-center justify-center gap-3 border-b px-2 py-3 md:justify-start md:px-5 md:py-5"
         style={{ borderColor: "var(--color-border)" }}
       >
         <div
-          className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden"
+          className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-lg md:h-10 md:w-10"
           style={{ background: "#ffffff" }}
         >
           <img src="/RUN-Logo.png" alt="RUN Logo" className="w-full h-full object-contain" />
         </div>
 
-        <div>
+        <div className="hidden md:block">
           <div className="font-semibold text-sm leading-tight text-white">
             RUN Transport
           </div>
@@ -128,28 +135,31 @@ export default function Navbar({ onReplaySplash }: NavbarProps = {}) {
       </div>
 
       {/* Role Badge & Switcher */}
-      <div className="px-4 pt-3 pb-1 relative">
+      <div className="relative px-2 pb-1 pt-3 md:px-4">
         <div
           onClick={() => setShowRoleMenu(!showRoleMenu)}
-          className={`flex items-center justify-between p-2 rounded-xl border text-xs cursor-pointer transition-all hover:opacity-90 ${roleMeta.bg} ${roleMeta.border}`}
+          className={`flex cursor-pointer items-center justify-center rounded-lg border p-2 text-xs transition-all hover:opacity-90 md:justify-between ${roleMeta.bg} ${roleMeta.border}`}
+          title={roleMeta.label}
         >
           <div className="flex items-center gap-2">
             <span>{roleMeta.icon}</span>
-            <span className={`font-bold ${roleMeta.color}`}>{roleMeta.label}</span>
+            <span className={`hidden font-bold md:inline ${roleMeta.color}`}>{roleMeta.label}</span>
           </div>
-          <span className="text-[10px] text-gray-400 font-mono">Switch ▾</span>
+          <span className="hidden text-[10px] text-gray-400 font-mono md:inline">Switch ▾</span>
         </div>
 
         {/* Quick Role Switch Popover */}
         {showRoleMenu && (
-          <div className="absolute left-4 right-4 top-12 z-50 p-2 rounded-2xl bg-black/95 border border-white/20 shadow-2xl space-y-1 animate-fadeIn">
+          <div className="animate-fadeIn absolute left-2 top-12 z-50 w-56 space-y-1 rounded-lg border border-white/20 bg-black/95 p-2 shadow-2xl md:left-4 md:right-4 md:w-auto">
             <div className="text-[10px] font-bold text-gray-400 px-2 py-1 uppercase tracking-wider">
               Change Active Role
             </div>
             {[
               { id: "student", label: "Student Commuter", icon: "🎓", desc: "Book rides & live GPS" },
               { id: "driver", label: "Campus Driver", icon: "🧑‍✈️", desc: "Pickup radar & earnings" },
-              { id: "authority", label: "School Authority", icon: "🏛️", desc: "Approvals & ride booking" },
+              ...(authorityAccess
+                ? [{ id: "authority", label: "School Authority", icon: "🏛️", desc: "Approvals & ride booking" }]
+                : []),
             ].map((r) => (
               <button
                 key={r.id}
@@ -168,6 +178,16 @@ export default function Navbar({ onReplaySplash }: NavbarProps = {}) {
                 {currentRole === r.id && <span className="text-xs">✓</span>}
               </button>
             ))}
+            {!authorityAccess && (
+              <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-2">
+                <div className="text-xs font-semibold text-emerald-300">
+                  Are you a school authority?
+                </div>
+                <div className="mt-0.5 text-[10px] leading-4 text-gray-400">
+                  Register as school authority during signup to unlock fleet review access.
+                </div>
+              </div>
+            )}
             <div className="pt-1 border-t border-white/10">
               <button
                 onClick={() => {
@@ -186,16 +206,17 @@ export default function Navbar({ onReplaySplash }: NavbarProps = {}) {
       {/* User Card with Custom Avatar Photo */}
       <div
         onClick={() => navigate("/profile")}
-        className="mx-4 mt-2 mb-2 p-3 rounded-xl cursor-pointer hover:border-blue-500/30 transition-all border"
+        className="mx-2 mb-2 mt-2 cursor-pointer rounded-lg border p-2 transition-all hover:border-blue-500/30 md:mx-4 md:p-3"
+        title="My Profile"
         style={{
           background: "rgba(29,78,216,0.08)",
           borderColor: "rgba(29,78,216,0.15)",
         }}
       >
-        <div className="flex items-center gap-3">
+        <div className="flex items-center justify-center gap-3 md:justify-start">
           {/* Custom Avatar Image or Initials Fallback */}
           <div
-            className="w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold shrink-0 shadow-md overflow-hidden border border-white/10"
+            className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0 shadow-md overflow-hidden border border-white/10"
             style={{
               background: profile.avatarGradient,
               color: "#fff",
@@ -212,7 +233,7 @@ export default function Navbar({ onReplaySplash }: NavbarProps = {}) {
             )}
           </div>
 
-          <div className="min-w-0 flex-1">
+          <div className="hidden min-w-0 flex-1 md:block">
             <div className="text-sm font-medium truncate text-white">
               {profile.name}
             </div>
@@ -226,7 +247,7 @@ export default function Navbar({ onReplaySplash }: NavbarProps = {}) {
         </div>
 
         <div
-          className="flex items-center justify-between mt-3 pt-2"
+          className="mt-3 hidden items-center justify-between pt-2 md:flex"
           style={{
             borderTop: "1px solid var(--color-border)",
           }}
@@ -248,23 +269,23 @@ export default function Navbar({ onReplaySplash }: NavbarProps = {}) {
       </div>
 
       {/* Navigation Items */}
-      <nav className="flex-1 px-3 py-2 space-y-1 overflow-y-auto">
+      <nav className="flex-1 space-y-1 overflow-y-auto px-2 py-2 md:px-3">
         {navItems.map((item) => (
           <NavLink
             key={item.path}
             to={item.path}
             className={({ isActive }) =>
-              `nav-item flex items-center justify-between px-3 py-2.5 rounded-lg transition-all text-sm font-medium ${
+              `nav-item flex items-center justify-center rounded-lg px-2 py-2.5 text-sm font-medium transition-all md:justify-between md:px-3 ${
                 isActive ? "bg-blue-600 text-white shadow-sm" : "text-gray-400 hover:bg-white/5 hover:text-gray-200"
               }`
             }
           >
             <div className="flex items-center gap-3">
               <span className="text-base">{item.icon}</span>
-              <span>{item.label}</span>
+              <span className="hidden md:inline">{item.label}</span>
             </div>
             {item.badge && (
-              <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+              <span className="hidden rounded-full border border-emerald-500/30 bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold text-emerald-300 md:inline-flex">
                 {item.badge}
               </span>
             )}
@@ -274,19 +295,21 @@ export default function Navbar({ onReplaySplash }: NavbarProps = {}) {
 
       {/* Emergency & Action footer */}
       <div
-        className="p-4 border-t space-y-2"
+        className="space-y-2 border-t p-2 md:p-4"
         style={{ borderColor: "var(--color-border)" }}
       >
         <button
           onClick={handleReplaySplash}
-          className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium border border-amber-500/20 bg-amber-500/5 text-amber-400 hover:bg-amber-500/10 transition-all cursor-pointer"
+          className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-2 py-2.5 text-sm font-medium text-amber-400 transition-all hover:bg-amber-500/10 md:justify-start md:px-3"
+          title="Replay Splash Screen"
         >
           <span>✨</span>
-          <span>Replay Splash Screen</span>
+          <span className="hidden md:inline">Replay Splash Screen</span>
         </button>
         <button
           onClick={() => alert("SOS Alert dispatched to Redeemer's University Security Marshall! Immediate response team notified.")}
-          className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-all cursor-pointer"
+          className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg px-2 py-2.5 text-sm font-medium transition-all md:justify-start md:px-3"
+          title="Emergency Alert"
           style={{
             background: "rgba(239,68,68,0.08)",
             border: "1px solid rgba(239,68,68,0.2)",
@@ -294,10 +317,10 @@ export default function Navbar({ onReplaySplash }: NavbarProps = {}) {
           }}
         >
           <span>🆘</span>
-          Emergency Alert
+          <span className="hidden md:inline">Emergency Alert</span>
         </button>
         <p
-          className="text-xs text-center mt-1"
+          className="mt-1 hidden text-center text-xs md:block"
           style={{ color: "var(--color-subtle)" }}
         >
           Contacts campus security

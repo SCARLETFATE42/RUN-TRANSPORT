@@ -27,15 +27,18 @@ interface ScheduledRide {
 const STORAGE_KEY = "runcampus_scheduled_rides";
 
 function loadSchedules(): ScheduledRide[] {
+  if (typeof window === "undefined") return [];
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
+    const parsed = raw ? (JSON.parse(raw) as unknown) : [];
+    return Array.isArray(parsed) ? (parsed as ScheduledRide[]) : [];
   } catch {
     return [];
   }
 }
 
 function saveSchedules(rides: ScheduledRide[]) {
+  if (typeof window === "undefined") return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(rides));
 }
 
@@ -54,6 +57,7 @@ function formatDate(dateStr: string): string {
 function formatTime(timeStr: string): string {
   if (!timeStr) return "";
   const [h, m] = timeStr.split(":").map(Number);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return timeStr;
   const suffix = h >= 12 ? "PM" : "AM";
   const hour = h % 12 || 12;
   return `${hour}:${m.toString().padStart(2, "0")} ${suffix}`;

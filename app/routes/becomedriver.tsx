@@ -2,7 +2,11 @@ import { useState } from "react";
 import { Link } from "react-router";
 import type { Route } from "./+types/becomedriver";
 import Navbar from "./navbar";
-import { submitApplication, type DriverApplication } from "../data/driverStore";
+import {
+  submitApplication,
+  type DriverApplication,
+  type DriverLicenseDocument,
+} from "../data/driverStore";
 import { NIGERIAN_BANKS } from "../data/mockData";
 
 export function meta({}: Route.MetaArgs) {
@@ -20,6 +24,9 @@ export default function BecomeDriver() {
   const [phone, setPhone] = useState("");
   const [vehicleType, setVehicleType] = useState("Campus Shuttle (Bus)");
   const [licensePlate, setLicensePlate] = useState("");
+  const [driverLicenseDocument, setDriverLicenseDocument] =
+    useState<DriverLicenseDocument | null>(null);
+  const [licenseUploadError, setLicenseUploadError] = useState("");
   const [experienceYears, setExperienceYears] = useState("3-5 years");
   const [preferredRoute, setPreferredRoute] = useState("All Campus Routes (Dorms, Dining, Faculties)");
   
@@ -49,10 +56,54 @@ export default function BecomeDriver() {
     }
   };
 
+  const handleDriverLicenseUpload = (file?: File) => {
+    setLicenseUploadError("");
+
+    if (!file) {
+      setDriverLicenseDocument(null);
+      return;
+    }
+
+    const isAllowedType =
+      file.type.startsWith("image/") ||
+      file.type === "application/pdf" ||
+      file.type === "application/msword" ||
+      file.type ===
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+    if (!isAllowedType) {
+      setDriverLicenseDocument(null);
+      setLicenseUploadError("Upload a license photo, PDF, DOC, or DOCX file.");
+      return;
+    }
+
+    if (file.size > 4 * 1024 * 1024) {
+      setDriverLicenseDocument(null);
+      setLicenseUploadError("Driver license file must be 4MB or smaller.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = typeof event.target?.result === "string" ? event.target.result : "";
+      if (!dataUrl) {
+        setLicenseUploadError("Unable to read that driver license file.");
+        return;
+      }
+
+      setDriverLicenseDocument({
+        fileName: file.name,
+        fileType: file.type || "application/octet-stream",
+        dataUrl,
+      });
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fullName || !phone || !licensePlate || !accountNumber || !accountName) {
-      alert("Please fill in all required driver details and banking payout information.");
+    if (!fullName || !phone || !licensePlate || !accountNumber || !accountName || !driverLicenseDocument) {
+      alert("Please fill in all required driver details, upload your driver's license, and add banking payout information.");
       return;
     }
     const app = submitApplication({
@@ -67,6 +118,7 @@ export default function BecomeDriver() {
       guarantorName,
       guarantorPhone,
       preferredRoute,
+      driverLicenseDocument,
     });
     setSubmittedApp(app);
     setFullName("");
@@ -74,6 +126,7 @@ export default function BecomeDriver() {
     setLicensePlate("");
     setAccountNumber("");
     setAccountName("");
+    setDriverLicenseDocument(null);
     setGuarantorName("");
     setGuarantorPhone("");
   };
@@ -266,6 +319,46 @@ export default function BecomeDriver() {
                       <option value="Main Gate & Visitor Terminal">Main Gate & Visitor Terminal</option>
                       <option value="Off-Campus Hospital & Exeat Transport">Off-Campus Hospital & Exeat Transport</option>
                     </select>
+                  </div>
+
+                  <div className="rounded-xl border border-white/10 bg-black/30 p-4">
+                    <label className="block text-xs font-semibold text-white">
+                      Driver's License Upload
+                    </label>
+                    <p className="mt-1 text-[11px] text-gray-400">
+                      Upload a clear license photo or a PDF/DOC document for review.
+                    </p>
+                    <input
+                      type="file"
+                      required
+                      accept="image/*,.pdf,.doc,.docx"
+                      onChange={(e) => handleDriverLicenseUpload(e.target.files?.[0])}
+                      className="mt-3 w-full text-xs text-gray-400 file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-600 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-white hover:file:bg-emerald-500"
+                    />
+                    {driverLicenseDocument && (
+                      <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
+                        <div className="min-w-0">
+                          <div className="truncate text-xs font-semibold text-emerald-300">
+                            {driverLicenseDocument.fileName}
+                          </div>
+                          <div className="text-[11px] text-gray-400">
+                            Ready for school authority review
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setDriverLicenseDocument(null)}
+                          className="shrink-0 text-[11px] font-semibold text-red-300 hover:text-red-200"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    )}
+                    {licenseUploadError && (
+                      <div className="mt-2 text-[11px] text-red-300">
+                        {licenseUploadError}
+                      </div>
+                    )}
                   </div>
                 </div>
 

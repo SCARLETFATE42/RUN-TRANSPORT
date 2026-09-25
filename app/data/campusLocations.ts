@@ -190,6 +190,7 @@ export function calculateDistanceMeters(
  * Formats meters into human-readable distance (e.g. "350 m" or "1.4 km")
  */
 export function formatDistance(meters: number): string {
+  if (meters <= 0) return "0 m";
   if (meters < 1000) {
     return `${Math.max(10, Math.round(meters))} m`;
   }
@@ -200,13 +201,17 @@ export function formatDistance(meters: number): string {
  * Retrieves the coordinates for a given campus location name, or defaults to campus center
  */
 export function getLocationCoordinates(name: string): { lat: number; lng: number } {
-  const found = CAMPUS_LOCATIONS[name];
+  const trimmedName = name.trim();
+  if (!trimmedName) {
+    return { lat: RUN_CAMPUS_CENTER.lat, lng: RUN_CAMPUS_CENTER.lng };
+  }
+  const found = CAMPUS_LOCATIONS[trimmedName];
   if (found) {
     return { lat: found.lat, lng: found.lng };
   }
   // Try partial match
   const key = Object.keys(CAMPUS_LOCATIONS).find((k) =>
-    k.toLowerCase().includes(name.toLowerCase())
+    k.toLowerCase().includes(trimmedName.toLowerCase())
   );
   if (key && CAMPUS_LOCATIONS[key]) {
     return { lat: CAMPUS_LOCATIONS[key].lat, lng: CAMPUS_LOCATIONS[key].lng };

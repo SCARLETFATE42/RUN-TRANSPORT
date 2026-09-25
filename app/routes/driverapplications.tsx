@@ -74,6 +74,7 @@ export default function DriverApplicationsReview() {
       app.phone.includes(search) ||
       (app.bankName && app.bankName.toLowerCase().includes(search.toLowerCase())) ||
       (app.accountNumber && app.accountNumber.includes(search)) ||
+      (app.driverLicenseDocument?.fileName.toLowerCase().includes(search.toLowerCase())) ||
       (app.driverId && app.driverId.toLowerCase().includes(search.toLowerCase()));
     return matchesFilter && matchesVehicle && matchesSearch;
   });
@@ -294,7 +295,7 @@ export default function DriverApplicationsReview() {
                   </div>
 
                   {/* Middle Row: Banking Payout Information */}
-                  <div className="py-3 grid sm:grid-cols-2 gap-3 text-xs border-b border-white/5">
+                  <div className="py-3 grid lg:grid-cols-3 gap-3 text-xs border-b border-white/5">
                     {/* Bank account box */}
                     <div className="p-3 rounded-xl bg-black/30 border border-emerald-500/20 flex items-center justify-between">
                       <div>
@@ -329,6 +330,29 @@ export default function DriverApplicationsReview() {
                           <span className="text-gray-400"> ({app.guarantorPhone})</span>
                         )}
                       </div>
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-black/30 border border-blue-500/20 flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-[10px] uppercase tracking-wider text-blue-400 font-bold">
+                          Driver's License
+                        </div>
+                        <div className="mt-1 truncate text-white font-medium">
+                          {app.driverLicenseDocument?.fileName || "No file uploaded"}
+                        </div>
+                        <div className="text-[11px] text-gray-400">
+                          {app.driverLicenseDocument ? "Photo/document attached" : "Request upload before approval"}
+                        </div>
+                      </div>
+                      {app.driverLicenseDocument && (
+                        <a
+                          href={app.driverLicenseDocument.dataUrl}
+                          download={app.driverLicenseDocument.fileName}
+                          className="shrink-0 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold bg-blue-500/15 text-blue-300 hover:bg-blue-500/25 border border-blue-500/30 transition-all"
+                        >
+                          Open
+                        </a>
+                      )}
                     </div>
                   </div>
 
@@ -533,6 +557,44 @@ export default function DriverApplicationsReview() {
                   <span className="text-gray-400">Campus Guarantor:</span>
                   <span className="text-white">{inspectingApp.guarantorName || "N/A"} ({inspectingApp.guarantorPhone || "N/A"})</span>
                 </div>
+              </div>
+
+              <div className="p-4 rounded-xl bg-blue-500/5 border border-blue-500/20 space-y-3">
+                <div className="text-[11px] font-bold text-blue-400 uppercase tracking-wider">
+                  Driver's License Upload
+                </div>
+                {inspectingApp.driverLicenseDocument ? (
+                  <>
+                    {inspectingApp.driverLicenseDocument.fileType.startsWith("image/") && (
+                      <img
+                        src={inspectingApp.driverLicenseDocument.dataUrl}
+                        alt="Driver license preview"
+                        className="max-h-44 w-full rounded-xl object-cover border border-white/10"
+                      />
+                    )}
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="truncate text-white font-semibold">
+                          {inspectingApp.driverLicenseDocument.fileName}
+                        </div>
+                        <div className="text-[11px] text-gray-400">
+                          {inspectingApp.driverLicenseDocument.fileType || "Uploaded document"}
+                        </div>
+                      </div>
+                      <a
+                        href={inspectingApp.driverLicenseDocument.dataUrl}
+                        download={inspectingApp.driverLicenseDocument.fileName}
+                        className="shrink-0 rounded-lg border border-blue-500/30 bg-blue-500/15 px-3 py-2 text-[11px] font-semibold text-blue-300 hover:bg-blue-500/25"
+                      >
+                        Download
+                      </a>
+                    </div>
+                  </>
+                ) : (
+                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-amber-200">
+                    No driver's license file is attached to this application.
+                  </div>
+                )}
               </div>
 
               {/* Add/Edit Marshall Review Note */}

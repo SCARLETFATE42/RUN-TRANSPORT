@@ -3,6 +3,7 @@ import { type RouteConfig, index, route } from "@react-router/dev/routes";
 export default [
   index("routes/splashscreen.tsx"),      // First page
   route("AuthScreen", "routes/AuthScreen.tsx"),
+  route("auth/callback", "routes/auth.callback.tsx"),
   route("select-role", "routes/roleselection.tsx"),
   route("home", "routes/home.tsx"),
   route("mytrips", "routes/mytrips.tsx"),

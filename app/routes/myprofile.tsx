@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router";
+import { LogOut } from "lucide-react";
 import type { Route } from "./+types/myprofile";
 import Navbar from "./navbar";
 import NigerianPaymentModal from "../components/NigerianPaymentModal";
@@ -9,6 +10,7 @@ import {
   removeAvatarImage,
   type UserProfile,
 } from "../data/profileStore";
+import { createClient } from "~/utils/supabase.client";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -36,6 +38,7 @@ export default function Profile() {
   const [showImageModal, setShowImageModal] = useState(false);
   const [customUrlInput, setCustomUrlInput] = useState("");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const refreshProfile = () => {
@@ -123,6 +126,20 @@ export default function Profile() {
     showToast("Custom photo removed. Default initials restored.");
   };
 
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+
+    try {
+      const { error } = await createClient().auth.signOut();
+      if (error) throw error;
+    } catch (error) {
+      console.error("Unable to sign out of Supabase:", error);
+    } finally {
+      navigate("/AuthScreen", { replace: true });
+      setIsLoggingOut(false);
+    }
+  };
+
   return (
     <div
       className="flex h-screen overflow-hidden"
@@ -177,7 +194,7 @@ export default function Profile() {
             {/* Clickable Avatar Photo */}
             <div
               onClick={() => setShowImageModal(true)}
-              className="relative w-20 h-20 rounded-2xl flex items-center justify-center text-2xl font-bold shrink-0 shadow-lg cursor-pointer overflow-hidden group border-2 border-white/10 hover:border-blue-500 transition-all"
+              className="relative w-20 h-20 rounded-full flex items-center justify-center text-2xl font-bold shrink-0 shadow-lg cursor-pointer overflow-hidden group border-2 border-white/10 hover:border-blue-500 transition-all"
               style={{
                 background: profile.avatarGradient,
                 color: "#fff",
@@ -188,7 +205,7 @@ export default function Profile() {
                 <img
                   src={profile.avatarUrl}
                   alt={profile.name}
-                  className="w-full h-full object-cover rounded-2xl"
+                  className="w-full h-full object-cover"
                 />
               ) : (
                 profile.avatarInitials || "TF"
@@ -350,6 +367,31 @@ export default function Profile() {
           </div>
 
           {/* Settings & Customization list */}
+          <div
+            className="flex items-center justify-between gap-3 rounded-2xl border p-4"
+            style={{
+              background: "var(--color-surface)",
+              borderColor: "var(--color-border)",
+            }}
+          >
+            <div>
+              <div className="text-sm font-semibold text-white">Account Session</div>
+              <div className="text-xs" style={{ color: "var(--color-muted)" }}>
+                Sign out of this RUN Transport account.
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleLogout}
+              disabled={isLoggingOut}
+              className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-xs font-semibold text-gray-200 transition-all hover:bg-white/10 hover:text-white disabled:cursor-wait disabled:opacity-60"
+            >
+              <LogOut className="h-4 w-4" aria-hidden="true" />
+              <span>{isLoggingOut ? "Logging out..." : "Log Out"}</span>
+            </button>
+          </div>
+
+          {/* Settings & Customization list */}
           <div className="space-y-1 pt-1">
             {[
               { label: "Customize Profile & Themes", sub: "Edit initials, color gradient, hostel & contacts", icon: "🎨", path: "/customize-profile" },
@@ -408,7 +450,7 @@ export default function Profile() {
             {/* Current Image Preview */}
             <div className="flex items-center gap-4 p-4 rounded-2xl bg-black/40 border border-white/5">
               <div
-                className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-bold shadow-md overflow-hidden border border-white/10 shrink-0"
+                className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold shadow-md overflow-hidden border border-white/10 shrink-0"
                 style={{ background: profile.avatarGradient }}
               >
                 {profile.avatarUrl ? (

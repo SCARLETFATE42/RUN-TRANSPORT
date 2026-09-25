@@ -13,8 +13,8 @@ interface MainContentProps {
 export default function MainContent({
   step,
   eta,
-  pickup = "Main Hostel Prophet Moses",
-  dropoff = "Library Block",
+  pickup = "",
+  dropoff = "",
   driverName = "Mr. Balogun",
   vehicleType = "School Sedan",
   onDestinationReached,

@@ -1,5 +1,11 @@
 export type DriverStatus = "pending" | "approved" | "rejected";
 
+export interface DriverLicenseDocument {
+  fileName: string;
+  fileType: string;
+  dataUrl: string;
+}
+
 export interface DriverApplication {
   id: string;
   fullName: string;
@@ -16,6 +22,7 @@ export interface DriverApplication {
   guarantorName?: string;
   guarantorPhone?: string;
   preferredRoute?: string;
+  driverLicenseDocument?: DriverLicenseDocument;
   reviewNotes?: string;
   verifiedChecks: {
     license: boolean;
@@ -148,6 +155,33 @@ export const INITIAL_APPLICATIONS: DriverApplication[] = [
 
 const STORAGE_KEY = "run_transport_driver_applications_v2";
 
+function parseStoredApplications(raw: string): DriverApplication[] {
+  const parsed = JSON.parse(raw) as unknown;
+  return Array.isArray(parsed) ? (parsed as DriverApplication[]) : INITIAL_APPLICATIONS;
+}
+
+function generateApplicationId(applications: DriverApplication[]): string {
+  const usedIds = new Set(applications.map((app) => app.id));
+  for (let attempt = 0; attempt < 900; attempt += 1) {
+    const id = `APP-2026-${Math.floor(100 + Math.random() * 900)}`;
+    if (!usedIds.has(id)) return id;
+  }
+  return `APP-2026-${Date.now()}`;
+}
+
+function generateDriverId(applications: DriverApplication[]): string {
+  const usedIds = new Set(
+    applications
+      .map((app) => app.driverId)
+      .filter((value): value is string => Boolean(value)),
+  );
+  for (let attempt = 0; attempt < 900; attempt += 1) {
+    const id = `RUN-DRV-${Math.floor(100 + Math.random() * 900)}`;
+    if (!usedIds.has(id)) return id;
+  }
+  return `RUN-DRV-${Date.now()}`;
+}
+
 export function getApplications(): DriverApplication[] {
   if (typeof window === "undefined") return INITIAL_APPLICATIONS;
   try {
@@ -156,7 +190,7 @@ export function getApplications(): DriverApplication[] {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(INITIAL_APPLICATIONS));
       return INITIAL_APPLICATIONS;
     }
-    return JSON.parse(raw);
+    return parseStoredApplications(raw);
   } catch {
     return INITIAL_APPLICATIONS;
   }
@@ -174,11 +208,11 @@ export function submitApplication(data: {
   guarantorName?: string;
   guarantorPhone?: string;
   preferredRoute?: string;
+  driverLicenseDocument?: DriverLicenseDocument;
 }): DriverApplication {
   const current = getApplications();
-  const idNumber = Math.floor(100 + Math.random() * 900);
   const newApp: DriverApplication = {
-    id: `APP-2026-${idNumber}`,
+    id: generateApplicationId(current),
     fullName: data.fullName,
     phone: data.phone,
     vehicleType: data.vehicleType,
@@ -190,10 +224,11 @@ export function submitApplication(data: {
     guarantorName: data.guarantorName || "Pastor / HOD Referral",
     guarantorPhone: data.guarantorPhone || "0803 000 0000",
     preferredRoute: data.preferredRoute || "All Campus Zones",
+    driverLicenseDocument: data.driverLicenseDocument,
     status: "pending",
     submittedAt: "Just now",
     verifiedChecks: {
-      license: true,
+      license: Boolean(data.driverLicenseDocument),
       insurance: true,
       securityClearance: false,
       bankAccount: true,
@@ -217,7 +252,7 @@ export function updateApplicationStatus(
     if (app.id === id) {
       const driverId =
         status === "approved"
-          ? app.driverId || `RUN-DRV-${Math.floor(100 + Math.random() * 900)}`
+          ? app.driverId || generateDriverId(current)
           : undefined;
       return {
         ...app,

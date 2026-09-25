@@ -1,13 +1,19 @@
 import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import type { Route } from "./+types/customizeprofile";
 import Navbar from "./navbar";
 import {
-  getProfile,
-  saveProfile,
   AVATAR_GRADIENTS,
+  completeProfileSetup,
+  getProfile,
+  getProfileAuthMetadata,
   type UserProfile,
 } from "../data/profileStore";
+import {
+  REDEEMERS_COURSE_GROUPS,
+  REDEEMERS_COURSES,
+} from "../data/redeemersCourses";
+import { createClient } from "~/utils/supabase.client";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -19,23 +25,6 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
-const DEPARTMENTS = [
-  "Computer Science",
-  "Software Engineering",
-  "Cybersecurity",
-  "Information Technology",
-  "Mass Communication",
-  "Economics",
-  "Accounting",
-  "Business Administration",
-  "Law",
-  "Nursing Science",
-  "Medical Laboratory Science",
-  "Biochemistry",
-  "Mechanical Engineering",
-  "Electrical & Electronics Engineering",
-];
-
 const HOSTELS = [
   "Main Hostel Prophet Moses",
   "Engineering Hostel (Male)",
@@ -46,22 +35,51 @@ const HOSTELS = [
   "Prophet Moses Extension",
 ];
 
+async function saveSupabaseProfileMetadata(profile: UserProfile) {
+  const supabase = createClient();
+  const { data } = await supabase.auth.getSession();
+
+  if (!data.session) return;
+
+  const { error } = await supabase.auth.updateUser({
+    data: getProfileAuthMetadata(profile),
+  });
+
+  if (error) throw error;
+}
+
 export default function CustomizeProfile() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const isSetupMode = searchParams.get("setup") === "1";
   const [profile, setProfile] = useState<UserProfile>(getProfile());
   const [savedSuccess, setSavedSuccess] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const showSavedDepartment =
+    profile.department && !REDEEMERS_COURSES.includes(profile.department);
 
   useEffect(() => {
     setProfile(getProfile());
   }, []);
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    saveProfile(profile);
+    setIsSaving(true);
+
+    const completedProfile = completeProfileSetup(profile);
+    setProfile(completedProfile);
+
+    try {
+      await saveSupabaseProfileMetadata(completedProfile);
+    } catch (error) {
+      console.warn("Unable to update Supabase profile metadata:", error);
+    }
+
     setSavedSuccess(true);
+    setIsSaving(false);
     setTimeout(() => {
       setSavedSuccess(false);
-      navigate("/profile");
+      navigate(isSetupMode ? "/select-role" : "/profile");
     }, 1200);
   };
 
@@ -73,7 +91,7 @@ export default function CustomizeProfile() {
         background: "var(--color-bg)",
       }}
     >
-      <Navbar />
+      {!isSetupMode && <Navbar />}
 
       <div
         className="flex-1 overflow-y-auto p-6"
@@ -85,21 +103,21 @@ export default function CustomizeProfile() {
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <Link
-                  to="/profile"
+                  to={isSetupMode ? "/AuthScreen" : "/profile"}
                   className="text-xs text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
                 >
-                  ← Back to Profile
+                  {isSetupMode ? "Back to Sign In" : "Back to Profile"}
                 </Link>
               </div>
-              <h1 className="text-2xl font-bold text-white">Customize Profile</h1>
+              <h1 className="text-2xl font-bold text-white">{isSetupMode ? "Set Up Your Profile" : "Customize Profile"}</h1>
               <p className="text-xs text-gray-400">
-                Personalize your campus identity, avatar gradients, transit preferences, and emergency settings.
+                Personalize your campus identity, avatar gradients, transit preferences, and emergency settings before choosing your role.
               </p>
             </div>
 
             {savedSuccess && (
               <div className="px-4 py-2 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-semibold animate-bounce flex items-center gap-1.5 shadow-lg">
-                <span>✓</span> Profile Saved!
+                <span>Saved</span> {isSetupMode ? "Profile Ready!" : "Profile Saved!"}
               </div>
             )}
           </div>
@@ -124,7 +142,7 @@ export default function CustomizeProfile() {
 
             <div className="flex items-start sm:items-center gap-4">
               <div
-                className="w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-bold shadow-lg transition-all shrink-0 overflow-hidden border border-white/10"
+                className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold shadow-lg transition-all shrink-0 overflow-hidden border border-white/10"
                 style={{
                   background: profile.avatarGradient,
                   color: "#fff",
@@ -333,7 +351,7 @@ export default function CustomizeProfile() {
                   type="text"
                   value={profile.bio || ""}
                   onChange={(e) => setProfile({ ...profile, bio: e.target.value })}
-                  placeholder="e.g. Student Developer & Campus Tech Enthusiast 💻"
+                  placeholder="e.g. Student Developer & Campus Tech Enthusiast"
                   className="w-full px-4 py-2.5 rounded-xl text-sm bg-black/40 border border-white/10 text-white focus:border-blue-500 outline-none"
                 />
               </div>
@@ -387,10 +405,23 @@ export default function CustomizeProfile() {
                     onChange={(e) => setProfile({ ...profile, department: e.target.value })}
                     className="w-full px-4 py-2.5 rounded-xl text-sm bg-black/40 border border-white/10 text-white focus:border-blue-500 outline-none"
                   >
-                    {DEPARTMENTS.map((dept) => (
-                      <option key={dept} value={dept} className="bg-gray-900 text-white">
-                        {dept}
+                    {showSavedDepartment && (
+                      <option value={profile.department} className="bg-gray-900 text-white">
+                        {profile.department}
                       </option>
+                    )}
+                    {REDEEMERS_COURSE_GROUPS.map((group) => (
+                      <optgroup
+                        key={group.faculty}
+                        label={group.faculty}
+                        className="bg-gray-900 text-white"
+                      >
+                        {group.courses.map((course) => (
+                          <option key={course} value={course} className="bg-gray-900 text-white">
+                            {course}
+                          </option>
+                        ))}
+                      </optgroup>
                     ))}
                   </select>
                 </div>
@@ -448,6 +479,9 @@ export default function CustomizeProfile() {
                     onChange={(e) => setProfile({ ...profile, hostel: e.target.value })}
                     className="w-full px-4 py-2.5 rounded-xl text-sm bg-black/40 border border-white/10 text-white focus:border-blue-500 outline-none"
                   >
+                    <option value="" disabled className="bg-gray-900 text-white">
+                      Select hostel / hall
+                    </option>
                     {HOSTELS.map((h) => (
                       <option key={h} value={h} className="bg-gray-900 text-white">
                         {h}
@@ -656,16 +690,21 @@ export default function CustomizeProfile() {
             <div className="flex items-center gap-3 pt-2">
               <button
                 type="button"
-                onClick={() => navigate("/profile")}
+                onClick={() => navigate(isSetupMode ? "/select-role" : "/profile")}
                 className="flex-1 py-3 rounded-xl text-sm font-medium border border-white/10 text-gray-300 hover:bg-white/5 transition-all cursor-pointer"
               >
-                Cancel
+                {isSetupMode ? "Skip for now" : "Cancel"}
               </button>
               <button
                 type="submit"
-                className="flex-1 py-3 rounded-xl text-sm font-semibold bg-blue-600 hover:bg-blue-500 text-white transition-all shadow-lg cursor-pointer"
+                disabled={isSaving}
+                className="flex-1 py-3 rounded-xl text-sm font-semibold bg-blue-600 hover:bg-blue-500 text-white transition-all shadow-lg cursor-pointer disabled:cursor-wait disabled:opacity-60"
               >
-                Save All Profile Changes 💾
+                {isSaving
+                  ? "Saving..."
+                  : isSetupMode
+                    ? "Save and Choose Role"
+                    : "Save All Profile Changes"}
               </button>
             </div>
           </form>

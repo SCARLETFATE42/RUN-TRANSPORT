@@ -2,7 +2,11 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import type { Route } from "./+types/roleselection";
 import RUNLogo from "./runlogo";
-import { setCurrentRole, getProfile } from "../data/profileStore";
+import {
+  canUseAuthorityRole,
+  setCurrentRole,
+  getProfile,
+} from "../data/profileStore";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -20,10 +24,19 @@ export default function RoleSelection() {
   const navigate = useNavigate();
   const profile = getProfile();
   const [selectedRole, setSelectedRole] = useState<RoleType>(profile.role || "student");
+  const [showAuthorityNotice, setShowAuthorityNotice] = useState(false);
+  const authorityAccess = canUseAuthorityRole(profile);
 
   const handleSelectRole = (role: RoleType, targetPath?: string) => {
+    if (role === "authority" && !authorityAccess) {
+      setShowAuthorityNotice(true);
+      setSelectedRole("student");
+      return;
+    }
+
     setCurrentRole(role);
     setSelectedRole(role);
+    setShowAuthorityNotice(false);
 
     if (targetPath) {
       navigate(targetPath);
@@ -77,6 +90,16 @@ export default function RoleSelection() {
           <p className="text-sm mt-2 max-w-xl mx-auto" style={{ color: "var(--color-muted)" }}>
             Welcome, <span className="text-white font-semibold">{profile.name}</span>! Select how you will be navigating or managing the RUN Transport network. You can switch roles anytime from your navigation bar.
           </p>
+          {showAuthorityNotice && (
+            <div className="mx-auto mt-4 max-w-md rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-left">
+              <div className="text-sm font-bold text-emerald-300">
+                Are you a school authority?
+              </div>
+              <p className="mt-1 text-xs leading-5 text-gray-300">
+                Sign up with the school authority option enabled to access fleet reviews and authority tools.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* 3 Role Selection Cards */}
@@ -197,7 +220,11 @@ export default function RoleSelection() {
 
           {/* ── Option 3: School Authority ── */}
           <div
-            onClick={() => setSelectedRole("authority")}
+            onClick={() =>
+              authorityAccess
+                ? setSelectedRole("authority")
+                : handleSelectRole("authority")
+            }
             className={`glass rounded-2xl p-6 relative flex flex-col justify-between cursor-pointer transition-all duration-300 transform hover:-translate-y-1 ${
               selectedRole === "authority"
                 ? "ring-2 ring-emerald-500 shadow-2xl shadow-emerald-500/20 bg-emerald-950/20"
@@ -254,7 +281,8 @@ export default function RoleSelection() {
                   e.stopPropagation();
                   handleSelectRole("authority", "/fleet-reviews");
                 }}
-                className="w-full py-2.5 rounded-xl text-xs font-bold text-white transition-all shadow-md bg-emerald-600 hover:bg-emerald-500 cursor-pointer flex items-center justify-center gap-2"
+                className="w-full py-2.5 rounded-xl text-xs font-bold text-white transition-all shadow-md bg-emerald-600 hover:bg-emerald-500 cursor-pointer flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={!authorityAccess}
               >
                 <span>Approve Drivers (Fleet Portal)</span>
                 <span>📋</span>
@@ -264,7 +292,8 @@ export default function RoleSelection() {
                   e.stopPropagation();
                   handleSelectRole("authority", "/home");
                 }}
-                className="w-full py-2.5 rounded-xl text-xs font-semibold text-emerald-300 transition-all border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 cursor-pointer flex items-center justify-center gap-2"
+                className="w-full py-2.5 rounded-xl text-xs font-semibold text-emerald-300 transition-all border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 cursor-pointer flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={!authorityAccess}
               >
                 <span>Access Ride Booking Feature</span>
                 <span>🚀</span>

@@ -31,7 +31,8 @@ interface BookRideProps {
   confirmRide: () => void;
   eta: number;
   progress: number;
-  endRide: () => void;
+  cancelRide: () => void;
+  completeRide: () => void;
   approvedDrivers: DriverApplication[];
   selectedDriver: string | null;
   setSelectedDriver: React.Dispatch<React.SetStateAction<string | null>>;
@@ -83,7 +84,8 @@ export default function BookRide({
   confirmRide,
   eta,
   progress,
-  endRide,
+  cancelRide,
+  completeRide,
   approvedDrivers,
   selectedDriver,
   setSelectedDriver,
@@ -143,24 +145,29 @@ export default function BookRide({
           background: "var(--color-bg)",
         }}
       >
-        <div className={`absolute bottom-0 left-40 top-11 right-0 z-10 ${step === "idle" ? "top-52" : "top-10"}`}>
+        <div className={`absolute bottom-0 left-16 right-0 z-10 overflow-y-auto md:left-40 ${step === "idle" ? "top-28 md:top-52" : "top-24 md:top-10"}`}>
 
           {/* ── IDLE: Where are you going? ── */}
           {step === "idle" && (
-            <div className="slide-up p-5">
-              <div className="max-w-lg mx-auto glass rounded-2xl p-5" style={{ border: "1px solid var(--color-border)" }}>
+            <div className="slide-up p-2 md:p-5">
+              <div className="glass mx-auto max-w-lg rounded-lg p-3 md:p-5" style={{ border: "1px solid var(--color-border)" }}>
                 <h2 className="text-base font-semibold mb-4 text-white">Where are you going?</h2>
                 <div className="space-y-2.5 mb-4">
                   {/* Pickup */}
                   <div className="relative">
                     <div className="absolute left-3 top-1/2 -translate-y-1/2 w-2 h-2 rounded-full" style={{ background: "var(--color-primary)" }} />
                     <input
+                      type="search"
                       className="input-field w-full pl-8 pr-4 py-3 rounded-xl text-sm text-white"
                       placeholder="Pickup location"
                       value={pickup}
                       onChange={(e) => setPickup(e.target.value)}
                       onFocus={() => setPickupFocus(true)}
                       onBlur={() => setTimeout(() => setPickupFocus(false), 150)}
+                      autoComplete="off"
+                      role="combobox"
+                      aria-expanded={pickupFocus}
+                      aria-label="Search pickup location"
                     />
                     {pickupFocus && filteredPickup.length > 0 && (
                       <div className="absolute left-0 right-0 top-full mt-1 rounded-xl overflow-y-auto z-30" style={{ background: "var(--color-surface-2)", border: "1px solid var(--color-border)", maxHeight: "220px" }}>
@@ -185,12 +192,17 @@ export default function BookRide({
                       <div className="w-2 h-2 rounded-sm" style={{ background: "var(--color-amber)" }} />
                     </div>
                     <input
+                      type="search"
                       className="input-field w-full pl-8 pr-4 py-3 rounded-xl text-sm text-white"
                       placeholder="Drop-off location"
                       value={dropoff}
                       onChange={(e) => setDropoff(e.target.value)}
                       onFocus={() => setDropoffFocus(true)}
                       onBlur={() => setTimeout(() => setDropoffFocus(false), 150)}
+                      autoComplete="off"
+                      role="combobox"
+                      aria-expanded={dropoffFocus}
+                      aria-label="Search drop-off location"
                     />
                     {dropoffFocus && filteredDropoff.length > 0 && (
                       <div className="absolute left-0 right-0 top-full mt-1 rounded-xl overflow-y-auto z-30" style={{ background: "var(--color-surface-2)", border: "1px solid var(--color-border)", maxHeight: "220px" }}>
@@ -239,8 +251,8 @@ export default function BookRide({
 
           {/* ── SELECTING: Available approved drivers ── */}
           {step === "selecting" && (
-            <div className="slide-up p-5">
-              <div className="max-w-2xl mx-auto glass rounded-2xl p-5" style={{ border: "1px solid var(--color-border)" }}>
+            <div className="slide-up p-2 md:p-5">
+              <div className="glass mx-auto max-w-2xl rounded-lg p-3 md:p-5" style={{ border: "1px solid var(--color-border)" }}>
                 <div className="flex items-center justify-between mb-1">
                   <h2 className="text-base font-semibold text-white">Available Drivers</h2>
                   <button onClick={() => setStep("idle")} className="text-xs px-2 py-1 rounded-lg" style={{ color: "var(--color-muted)", background: "rgba(255,255,255,0.05)" }}>← Back</button>
@@ -296,8 +308,8 @@ export default function BookRide({
 
           {/* ── ACTIVE: Ride in progress ── */}
           {step === "active" && (
-            <div className="slide-up p-5">
-              <div className="max-w-2xl mx-auto glass rounded-2xl p-5" style={{ border: "1px solid rgba(34,197,94,0.2)" }}>
+            <div className="slide-up p-2 md:p-5">
+              <div className="glass mx-auto max-w-2xl rounded-lg p-3 md:p-5" style={{ border: "1px solid rgba(34,197,94,0.2)" }}>
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <div className="w-2.5 h-2.5 rounded-full" style={{ background: "var(--color-green)", boxShadow: "0 0 6px rgba(34,197,94,0.5)" }} />
@@ -311,7 +323,7 @@ export default function BookRide({
                   <div className="h-full rounded-full progress-bar" style={{ width: `${rideProgress}%` }} />
                 </div>
 
-                <div className="flex items-center gap-4">
+                <div className="flex flex-wrap items-center gap-3 md:gap-4">
                   <div className="w-12 h-12 rounded-full flex items-center justify-center text-xl" style={{ background: "rgba(29,78,216,0.15)", border: "1px solid rgba(29,78,216,0.25)" }}>
                     {activeDriver ? (VEHICLE_ICONS[activeDriver.vehicleType] ?? "🚗") : "🧑‍✈️"}
                   </div>
@@ -333,7 +345,7 @@ export default function BookRide({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3 mt-4 pt-3" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                <div className="mt-4 flex flex-wrap items-center gap-3 pt-3" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
                   <div className="flex-1 text-xs" style={{ color: "var(--color-muted)" }}>
                     <span style={{ color: "var(--color-primary)" }}>●</span> {pickup} → <span style={{ color: "var(--color-amber)" }}>■</span> {dropoff}
                   </div>
@@ -346,7 +358,7 @@ export default function BookRide({
                       💳 Pay {fare}
                     </button>
                     <button
-                      onClick={endRide}
+                      onClick={cancelRide}
                       className="text-xs px-3 py-1.5 rounded-lg transition-all"
                       style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", color: "var(--color-red)" }}
                     >
@@ -360,8 +372,8 @@ export default function BookRide({
 
           {/* ── PAYMENT: Choose bank app ── */}
           {step === "payment" && (
-            <div className="slide-up p-5">
-              <div className="max-w-lg mx-auto glass rounded-2xl p-5" style={{ border: "1px solid rgba(34,197,94,0.3)" }}>
+            <div className="slide-up p-2 md:p-5">
+              <div className="glass mx-auto max-w-lg rounded-lg p-3 md:p-5" style={{ border: "1px solid rgba(34,197,94,0.3)" }}>
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-base font-semibold text-white">Pay Driver</h2>
                   <button onClick={() => setStep("active")} className="text-xs px-2 py-1 rounded-lg" style={{ color: "var(--color-muted)", background: "rgba(255,255,255,0.05)" }}>← Back</button>
@@ -409,7 +421,7 @@ export default function BookRide({
                 </div>
 
                 <button
-                  onClick={() => { endRide(); }}
+                  onClick={completeRide}
                   className="w-full py-2.5 rounded-xl text-sm font-semibold transition-all"
                   style={{ background: "rgba(255,255,255,0.05)", border: "1px solid var(--color-border)", color: "var(--color-muted)" }}
                 >
