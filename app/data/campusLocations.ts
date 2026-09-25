@@ -219,6 +219,32 @@ export function getLocationCoordinates(name: string): { lat: number; lng: number
   return { lat: RUN_CAMPUS_CENTER.lat, lng: RUN_CAMPUS_CENTER.lng };
 }
 
+export function getNearestCampusLocation(position: {
+  lat: number;
+  lng: number;
+}): { location: CampusLocation; distanceMeters: number } {
+  const locations = Object.values(CAMPUS_LOCATIONS);
+  const nearest = locations.reduce(
+    (best, location) => {
+      const distanceMeters = calculateDistanceMeters(
+        position.lat,
+        position.lng,
+        location.lat,
+        location.lng,
+      );
+      return distanceMeters < best.distanceMeters
+        ? { location, distanceMeters }
+        : best;
+    },
+    {
+      location: locations[0],
+      distanceMeters: Number.POSITIVE_INFINITY,
+    },
+  );
+
+  return nearest;
+}
+
 /**
  * Generates an interpolated route path with intermediate waypoints
  */

@@ -9,6 +9,7 @@ export interface RecordedTrip {
   dropoff: string;
   driverName: string;
   driverApplicationId?: string;
+  scheduledRideId?: string;
   vehicle: string;
   fareNaira: number;
   estimatedDurationMinutes: number;
@@ -25,10 +26,17 @@ export type CreateTripInput = Pick<
   | "dropoff"
   | "driverName"
   | "driverApplicationId"
+  | "scheduledRideId"
   | "vehicle"
   | "fareNaira"
   | "estimatedDurationMinutes"
 >;
+
+export interface TripStats {
+  totalRides: number;
+  ridesThisMonth: number;
+  creditsSpent: number;
+}
 
 const STORAGE_PREFIX = "run_transport_trips_v1:";
 const TRIPS_UPDATED_EVENT = "run-transport-trips-updated";
@@ -55,14 +63,22 @@ function isRecordedTrip(value: unknown): value is RecordedTrip {
     Number.isFinite(trip.fareNaira) &&
     typeof trip.estimatedDurationMinutes === "number" &&
     Number.isFinite(trip.estimatedDurationMinutes) &&
+    (trip.driverApplicationId === undefined ||
+      typeof trip.driverApplicationId === "string") &&
+    (trip.scheduledRideId === undefined ||
+      typeof trip.scheduledRideId === "string") &&
     (trip.status === "active" ||
       trip.status === "completed" ||
       trip.status === "cancelled") &&
     (trip.paymentStatus === "pending" ||
       trip.paymentStatus === "paid" ||
       trip.paymentStatus === "unverified") &&
+    (trip.paymentReference === undefined ||
+      typeof trip.paymentReference === "string") &&
     typeof trip.startedAt === "number" &&
-    Number.isFinite(trip.startedAt)
+    Number.isFinite(trip.startedAt) &&
+    (trip.endedAt === undefined ||
+      (typeof trip.endedAt === "number" && Number.isFinite(trip.endedAt)))
   );
 }
 
@@ -112,7 +128,43 @@ export function getActiveTrip() {
   return getTrips().find((trip) => trip.status === "active") ?? null;
 }
 
+export function getTripStats(
+  trips: RecordedTrip[],
+  currentTimestamp = Date.now(),
+): TripStats {
+  const currentDate = new Date(currentTimestamp);
+  const monthStart = new Date(
+    currentDate.getFullYear(),
+    currentDate.getMonth(),
+    1,
+  ).getTime();
+  const nextMonthStart = new Date(
+    currentDate.getFullYear(),
+    currentDate.getMonth() + 1,
+    1,
+  ).getTime();
+  const completedTrips = trips.filter((trip) => trip.status === "completed");
+
+  return {
+    totalRides: completedTrips.length,
+    ridesThisMonth: completedTrips.filter((trip) => {
+      const completedAt = trip.endedAt ?? trip.startedAt;
+      return completedAt >= monthStart && completedAt < nextMonthStart;
+    }).length,
+    creditsSpent: completedTrips
+      .filter((trip) => trip.paymentStatus === "paid")
+      .reduce((total, trip) => total + trip.fareNaira, 0),
+  };
+}
+
 export function createTrip(input: CreateTripInput): RecordedTrip {
+  if (input.scheduledRideId) {
+    const existingTrip = getTrips().find(
+      (trip) => trip.scheduledRideId === input.scheduledRideId,
+    );
+    if (existingTrip) return existingTrip;
+  }
+
   const trip: RecordedTrip = {
     ...input,
     id: createTripId(),

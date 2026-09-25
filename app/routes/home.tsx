@@ -11,7 +11,9 @@ import {
   completeTrip,
   createTrip,
   getActiveTrip,
+  subscribeToTrips,
 } from "../data/tripStore";
+import type { DriverTrackingSnapshot } from "../types";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -34,6 +36,9 @@ export default function Home() {
   const [vehicle, setVehicle] = useState("School Sedan");
   const [selectedDriver, setSelectedDriver] = useState<string | null>(null);
   const [showPaystackModal, setShowPaystackModal] = useState(false);
+  const [activeTripStartedAt, setActiveTripStartedAt] = useState<number>();
+  const [driverTracking, setDriverTracking] =
+    useState<DriverTrackingSnapshot | null>(null);
   const activeTripIdRef = useRef<string | null>(null);
   const paymentConfirmedRef = useRef(false);
 
@@ -56,17 +61,23 @@ export default function Home() {
     : LOCATIONS;
 
   useEffect(() => {
-    const activeTrip = getActiveTrip();
-    if (!activeTrip) return;
+    const syncActiveTrip = () => {
+      const activeTrip = getActiveTrip();
+      if (!activeTrip) return;
 
-    activeTripIdRef.current = activeTrip.id;
-    setPickup(activeTrip.pickup);
-    setDropoff(activeTrip.dropoff);
-    setVehicle(activeTrip.vehicle);
-    setSelectedDriver(activeTrip.driverApplicationId ?? null);
-    setEta(activeTrip.estimatedDurationMinutes);
-    setProgress(5);
-    setStep("active");
+      activeTripIdRef.current = activeTrip.id;
+      setActiveTripStartedAt(activeTrip.startedAt);
+      setPickup(activeTrip.pickup);
+      setDropoff(activeTrip.dropoff);
+      setVehicle(activeTrip.vehicle);
+      setSelectedDriver(activeTrip.driverApplicationId ?? null);
+      setEta(activeTrip.estimatedDurationMinutes);
+      setProgress(5);
+      setStep("active");
+    };
+
+    syncActiveTrip();
+    return subscribeToTrips(syncActiveTrip);
   }, []);
 
   const startBooking = () => setStep("selecting");
@@ -87,6 +98,7 @@ export default function Home() {
       estimatedDurationMinutes: eta,
     });
     activeTripIdRef.current = trip.id;
+    setActiveTripStartedAt(trip.startedAt);
     paymentConfirmedRef.current = false;
     setStep("active");
     setEta(4);
@@ -97,6 +109,8 @@ export default function Home() {
     activeTripIdRef.current = null;
     paymentConfirmedRef.current = false;
     setShowPaystackModal(false);
+    setActiveTripStartedAt(undefined);
+    setDriverTracking(null);
     setStep("idle");
     setProgress(15);
     setSelectedDriver(null);
@@ -141,8 +155,11 @@ export default function Home() {
         pickup={pickup}
         dropoff={dropoff}
         driverName={activeDriver?.fullName || "Mr. Balogun"}
+        driverId={activeDriver?.id}
         vehicleType={activeDriver?.vehicleType || vehicle}
+        tripStartedAt={activeTripStartedAt}
         onDestinationReached={handleDestinationReached}
+        onTrackingUpdate={setDriverTracking}
       />
 
       <BookRide
@@ -170,6 +187,7 @@ export default function Home() {
         selectedDriver={selectedDriver}
         setSelectedDriver={setSelectedDriver}
         goToPayment={goToPayment}
+        driverTracking={driverTracking}
       />
 
       {/* Flutterwave Checkout Modal — automatically triggered on arrival */}
@@ -181,7 +199,6 @@ export default function Home() {
             return;
           }
           setShowPaystackModal(false);
-          setStep("active");
         }}
         amountNaira={fareNaira}
         driverName={activeDriver?.fullName || "Sunday Balogun"}

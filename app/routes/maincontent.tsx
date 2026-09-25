@@ -1,4 +1,5 @@
 import GoogleCampusMap from "../components/GoogleCampusMap";
+import type { DriverTrackingSnapshot } from "../types";
 
 interface MainContentProps {
   step: "idle" | "selecting" | "active" | "payment";
@@ -6,8 +7,11 @@ interface MainContentProps {
   pickup?: string;
   dropoff?: string;
   driverName?: string;
+  driverId?: string;
   vehicleType?: string;
+  tripStartedAt?: number;
   onDestinationReached?: () => void;
+  onTrackingUpdate?: (tracking: DriverTrackingSnapshot | null) => void;
 }
 
 export default function MainContent({
@@ -16,8 +20,11 @@ export default function MainContent({
   pickup = "",
   dropoff = "",
   driverName = "Mr. Balogun",
+  driverId = "",
   vehicleType = "School Sedan",
+  tripStartedAt,
   onDestinationReached,
+  onTrackingUpdate,
 }: MainContentProps) {
   return (
     <main className="flex-1 flex overflow-hidden relative">
@@ -28,9 +35,12 @@ export default function MainContent({
           pickup={pickup}
           dropoff={dropoff}
           driverName={driverName}
+          driverId={driverId}
           vehicleType={vehicleType}
           etaMinutes={eta}
+          tripStartedAt={tripStartedAt}
           onDestinationReached={onDestinationReached}
+          onTrackingUpdate={onTrackingUpdate}
         />
       </div>
     </main>

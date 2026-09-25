@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Route } from "./+types/mytrips";
 import {
+  getTripStats,
   getTrips,
   subscribeToTrips,
   type RecordedTrip,
@@ -82,36 +83,23 @@ export default function MyTrips() {
   }, []);
 
   useEffect(() => {
-    if (!trips.some((trip) => trip.status === "active")) return;
     const timer = window.setInterval(() => setNow(Date.now()), 30_000);
     return () => window.clearInterval(timer);
-  }, [trips]);
+  }, []);
 
   const stats = useMemo(() => {
-    const completedTrips = trips.filter((trip) => trip.status === "completed");
-    const currentDate = new Date();
-    const thisMonth = completedTrips.filter((trip) => {
-      const date = new Date(trip.endedAt ?? trip.startedAt);
-      return (
-        date.getMonth() === currentDate.getMonth() &&
-        date.getFullYear() === currentDate.getFullYear()
-      );
-    });
-    const creditsSpent = completedTrips.reduce(
-      (total, trip) => total + trip.fareNaira,
-      0,
-    );
+    const summary = getTripStats(trips, now);
 
     return [
-      { label: "Total Rides", value: completedTrips.length.toString(), icon: "🚗" },
-      { label: "This Month", value: thisMonth.length.toString(), icon: "📅" },
+      { label: "Total Rides", value: summary.totalRides.toString(), icon: "🚗" },
+      { label: "This Month", value: summary.ridesThisMonth.toString(), icon: "📅" },
       {
         label: "Credits Spent",
-        value: `₦${creditsSpent.toLocaleString("en-NG")}`,
+        value: `₦${summary.creditsSpent.toLocaleString("en-NG")}`,
         icon: "💰",
       },
     ];
-  }, [trips]);
+  }, [now, trips]);
 
   return (
     <>

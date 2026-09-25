@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { Route } from "./+types/home";
 import type { DriverApplication } from "../data/driverStore";
+import { formatDistance } from "../data/campusLocations";
 import { formatFare, getVehiclePrice } from "../data/mockData";
+import type { DriverTrackingSnapshot } from "../types";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -37,6 +39,7 @@ interface BookRideProps {
   selectedDriver: string | null;
   setSelectedDriver: React.Dispatch<React.SetStateAction<string | null>>;
   goToPayment: () => void;
+  driverTracking: DriverTrackingSnapshot | null;
 }
 
 const VEHICLE_ICONS: Record<string, string> = {
@@ -90,43 +93,21 @@ export default function BookRide({
   selectedDriver,
   setSelectedDriver,
   goToPayment,
+  driverTracking,
 }: BookRideProps) {
   const [showBankModal, setShowBankModal] = useState(false);
-
-  // Countdown: seeded from `eta` (minutes) whenever a ride goes active.
-  const [remainingSeconds, setRemainingSeconds] = useState(0);
-  const [totalSeconds, setTotalSeconds] = useState(0);
-
-  useEffect(() => {
-    if (step === "active") {
-      const total = Math.max(eta, 0) * 60;
-      setTotalSeconds(total);
-      setRemainingSeconds(total);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step]);
-
-  useEffect(() => {
-    if (step !== "active") return;
-    const id = setInterval(() => {
-      setRemainingSeconds((s) => {
-        if (s <= 1) {
-          clearInterval(id);
-          setTimeout(() => goToPayment(), 600);
-          return 0;
-        }
-        return s - 1;
-      });
-    }, 1000);
-    return () => clearInterval(id);
-  }, [step]);
-
-  // Progress bar fills as the countdown ticks down — 0% when the ride
-  // starts, 100% once remainingSeconds hits 0.
-  const rideProgress =
-    totalSeconds > 0
-      ? Math.min(100, ((totalSeconds - remainingSeconds) / totalSeconds) * 100)
-      : progress; // fall back to the parent-supplied value if we have no countdown yet
+  const remainingSeconds = driverTracking?.etaSeconds ?? Math.max(eta, 0) * 60;
+  const rideProgress = driverTracking?.overallProgress ?? progress;
+  const trackingTitle =
+    driverTracking?.phase === "approaching_pickup"
+      ? "Driver coming to you"
+      : driverTracking?.phase === "at_pickup"
+        ? "Driver is at pickup"
+        : driverTracking?.phase === "arrived"
+          ? "Destination reached"
+          : "Ride in progress";
+  const etaPrefix =
+    driverTracking?.phase === "approaching_pickup" ? "Pickup ETA" : "ETA";
 
   const activeDriver = approvedDrivers.find((d) => d.id === selectedDriver) || approvedDrivers[0];
   const fare = activeDriver ? formatFare(activeDriver.vehicleType) : formatFare("School Sedan");
@@ -313,9 +294,15 @@ export default function BookRide({
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <div className="w-2.5 h-2.5 rounded-full" style={{ background: "var(--color-green)", boxShadow: "0 0 6px rgba(34,197,94,0.5)" }} />
-                    <span className="text-sm font-semibold text-white">Ride Active</span>
+                    <span className="text-sm font-semibold text-white">{trackingTitle}</span>
                   </div>
-                  <span className="text-xs" style={{ color: "var(--color-muted)" }}>ETA {formatCountdown(remainingSeconds)}</span>
+                  <span className="text-xs" style={{ color: "var(--color-muted)" }}>
+                    {driverTracking?.phase === "at_pickup"
+                      ? "Waiting for pickup"
+                      : driverTracking?.phase === "arrived"
+                        ? "Arrived"
+                        : `${etaPrefix} ${formatCountdown(remainingSeconds)}`}
+                  </span>
                 </div>
 
                 {/* Progress */}
@@ -332,6 +319,16 @@ export default function BookRide({
                     <div className="text-xs" style={{ color: "var(--color-muted)" }}>
                       {activeDriver?.vehicleType} · {activeDriver?.licensePlate ?? "RUN-007"}
                     </div>
+                    {driverTracking && (
+                      <div
+                        className="mt-1 text-xs"
+                        style={{ color: "var(--color-green)" }}
+                      >
+                        ● {driverTracking.locationLabel}
+                        {driverTracking.remainingDistanceMeters > 0 &&
+                          ` · ${formatDistance(driverTracking.remainingDistanceMeters)} to ${driverTracking.targetLabel}`}
+                      </div>
+                    )}
                     <div className="flex items-center gap-1 mt-0.5">
                       {"★★★★★".split("").map((s, i) => (
                         <span key={i} style={{ color: "var(--color-amber)", fontSize: "11px" }}>{s}</span>

@@ -17,13 +17,19 @@ import {
   UserRound,
 } from "lucide-react";
 import {
+  CAMPUS_LOCATIONS,
   RUN_CAMPUS_CENTER,
   calculateDistanceMeters,
   formatDistance,
   generateCampusRoute,
   getLocationCoordinates,
+  getNearestCampusLocation,
 } from "../data/campusLocations";
 import { getCurrentRole, getProfile } from "../data/profileStore";
+import type {
+  DriverTrackingSnapshot,
+  RideTrackingPhase,
+} from "../types";
 
 interface GoogleCampusMapProps {
   step: "idle" | "selecting" | "active" | "payment";
@@ -32,7 +38,9 @@ interface GoogleCampusMapProps {
   driverName?: string;
   vehicleType?: string;
   etaMinutes?: number;
+  tripStartedAt?: number;
   onDestinationReached?: () => void;
+  onTrackingUpdate?: (tracking: DriverTrackingSnapshot | null) => void;
   driverId?: string;
 }
 
@@ -45,6 +53,10 @@ const CAMPUS_BOUNDS = {
   minLng: 4.4295,
   maxLng: 4.4445,
 };
+const PICKUP_DWELL_SECONDS = 5;
+const MIN_APPROACH_SECONDS = 30;
+const MAX_APPROACH_SECONDS = 90;
+const ESTIMATED_APPROACH_SPEED_MPS = 4.5;
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
@@ -92,6 +104,29 @@ function firstName(name: string, fallback: string) {
   return name.trim().split(/\s+/)[0] || fallback;
 }
 
+function getDriverStartPosition(
+  identity: string,
+  pickupPosition: Coordinates,
+): Coordinates {
+  const candidates = Object.values(CAMPUS_LOCATIONS).filter(
+    (location) =>
+      calculateDistanceMeters(
+        location.lat,
+        location.lng,
+        pickupPosition.lat,
+        pickupPosition.lng,
+      ) >= 80,
+  );
+  if (candidates.length === 0) return RUN_CAMPUS_CENTER;
+
+  const hash = Array.from(identity || "driver").reduce(
+    (value, character) => (value * 31 + character.charCodeAt(0)) >>> 0,
+    0,
+  );
+  const start = candidates[hash % candidates.length];
+  return { lat: start.lat, lng: start.lng };
+}
+
 export default function GoogleCampusMap({
   step,
   pickup = "",
@@ -99,16 +134,20 @@ export default function GoogleCampusMap({
   driverName = "",
   vehicleType = "",
   etaMinutes = 4,
+  tripStartedAt,
   onDestinationReached,
+  onTrackingUpdate,
+  driverId = "",
 }: GoogleCampusMapProps) {
   const [currentRole, setCurrentRole] = useState<
     "student" | "driver" | "authority"
   >("student");
   const [riderName, setRiderName] = useState("Rider");
-  const [progress, setProgress] = useState(0);
   const [hasTriggeredArrival, setHasTriggeredArrival] = useState(false);
   const [viewerPosition, setViewerPosition] = useState<Coordinates | null>(null);
   const [gpsStatus, setGpsStatus] = useState<GpsStatus>("idle");
+  const [clock, setClock] = useState(() => Date.now());
+  const [trackingStartedAt, setTrackingStartedAt] = useState(() => Date.now());
 
   const hasPickup = pickup.trim().length > 0;
   const hasDropoff = dropoff.trim().length > 0;
@@ -121,19 +160,84 @@ export default function GoogleCampusMap({
     () => getLocationCoordinates(dropoff),
     [dropoff],
   );
-  const waypoints = useMemo(
+  const driverStartPosition = useMemo(
+    () => getDriverStartPosition(driverId || driverName, pickupCoords),
+    [driverId, driverName, pickupCoords],
+  );
+  const approachWaypoints = useMemo(
+    () =>
+      hasRoute
+        ? generateCampusRoute(driverStartPosition, pickupCoords, 60)
+        : [],
+    [driverStartPosition, hasRoute, pickupCoords],
+  );
+  const tripWaypoints = useMemo(
     () =>
       hasRoute ? generateCampusRoute(pickupCoords, dropoffCoords, 80) : [],
     [dropoffCoords, hasRoute, pickupCoords],
   );
-  const currentWaypointIndex = waypoints.length
+  const approachDistanceMeters = hasRoute
+    ? calculateDistanceMeters(
+        driverStartPosition.lat,
+        driverStartPosition.lng,
+        pickupCoords.lat,
+        pickupCoords.lng,
+      )
+    : 0;
+  const approachDurationSeconds = clamp(
+    Math.round(approachDistanceMeters / ESTIMATED_APPROACH_SPEED_MPS),
+    MIN_APPROACH_SECONDS,
+    MAX_APPROACH_SECONDS,
+  );
+  const tripDurationSeconds = Math.max(60, Math.round(etaMinutes * 60));
+  const totalTrackingSeconds =
+    approachDurationSeconds + PICKUP_DWELL_SECONDS + tripDurationSeconds;
+  const elapsedSeconds =
+    step === "active"
+      ? Math.max(0, (clock - (tripStartedAt ?? trackingStartedAt)) / 1000)
+      : 0;
+  const ridePhase: RideTrackingPhase =
+    elapsedSeconds < approachDurationSeconds
+      ? "approaching_pickup"
+      : elapsedSeconds < approachDurationSeconds + PICKUP_DWELL_SECONDS
+        ? "at_pickup"
+        : elapsedSeconds < totalTrackingSeconds
+          ? "in_transit"
+          : "arrived";
+  const legProgress =
+    ridePhase === "approaching_pickup"
+      ? clamp((elapsedSeconds / approachDurationSeconds) * 100, 0, 100)
+      : ridePhase === "at_pickup"
+        ? 100
+        : ridePhase === "in_transit"
+          ? clamp(
+              ((elapsedSeconds -
+                approachDurationSeconds -
+                PICKUP_DWELL_SECONDS) /
+                tripDurationSeconds) *
+                100,
+              0,
+              100,
+            )
+          : 100;
+  const activeWaypoints =
+    ridePhase === "approaching_pickup" || ridePhase === "at_pickup"
+      ? approachWaypoints
+      : tripWaypoints;
+  const currentWaypointIndex = activeWaypoints.length
     ? Math.min(
-        waypoints.length - 1,
-        Math.floor((progress / 100) * (waypoints.length - 1)),
+        activeWaypoints.length - 1,
+        Math.floor((legProgress / 100) * (activeWaypoints.length - 1)),
       )
     : 0;
   const simulatedDriverPosition =
-    waypoints[currentWaypointIndex] ?? pickupCoords;
+    step !== "active"
+      ? pickupCoords
+      : ridePhase === "at_pickup"
+        ? pickupCoords
+        : ridePhase === "arrived"
+          ? dropoffCoords
+          : activeWaypoints[currentWaypointIndex] ?? pickupCoords;
   const viewerIsOnCampus = viewerPosition
     ? isOnCampusMap(viewerPosition)
     : false;
@@ -149,37 +253,54 @@ export default function GoogleCampusMap({
       : pickupCoords;
 
   const nextWaypoint =
-    waypoints[Math.min(currentWaypointIndex + 2, waypoints.length - 1)] ??
-    dropoffCoords;
+    activeWaypoints[
+      Math.min(currentWaypointIndex + 2, activeWaypoints.length - 1)
+    ] ??
+    (ridePhase === "approaching_pickup" ? pickupCoords : dropoffCoords);
   const heading = getBearing(driverPosition, nextWaypoint);
   const pickupPoint = getMapPoint(pickupCoords);
   const dropoffPoint = getMapPoint(dropoffCoords);
   const driverPoint = getMapPoint(driverPosition);
   const riderPoint = getMapPoint(riderPosition);
-  const totalDistanceMeters = hasRoute
-    ? calculateDistanceMeters(
-        pickupCoords.lat,
-        pickupCoords.lng,
-        dropoffCoords.lat,
-        dropoffCoords.lng,
-      )
-    : 0;
+  const targetCoords =
+    ridePhase === "approaching_pickup" || ridePhase === "at_pickup"
+      ? pickupCoords
+      : dropoffCoords;
+  const targetLabel =
+    ridePhase === "approaching_pickup" || ridePhase === "at_pickup"
+      ? pickup
+      : dropoff;
   const remainingDistanceMeters = hasRoute
-    ? usesDeviceDriverPosition
-      ? calculateDistanceMeters(
+    ? ridePhase === "at_pickup" || ridePhase === "arrived"
+      ? 0
+      : calculateDistanceMeters(
           driverPosition.lat,
           driverPosition.lng,
-          dropoffCoords.lat,
-          dropoffCoords.lng,
+          targetCoords.lat,
+          targetCoords.lng,
         )
-      : Math.max(0, Math.round(totalDistanceMeters * (1 - progress / 100)))
     : 0;
-  const remainingSeconds = Math.max(
+  const remainingSeconds =
+    ridePhase === "approaching_pickup"
+      ? Math.max(0, Math.ceil(approachDurationSeconds - elapsedSeconds))
+      : ridePhase === "in_transit"
+        ? Math.max(
+            0,
+            Math.ceil(
+              totalTrackingSeconds - elapsedSeconds,
+            ),
+          )
+        : 0;
+  const overallProgress = clamp(
+    (elapsedSeconds / totalTrackingSeconds) * 100,
     0,
-    Math.round(etaMinutes * 60 * (1 - progress / 100)),
+    100,
   );
   const speedKmh =
-    step === "active" && remainingSeconds > 0
+    step === "active" &&
+    remainingSeconds > 0 &&
+    ridePhase !== "at_pickup" &&
+    ridePhase !== "arrived"
       ? clamp(
           Math.round((remainingDistanceMeters / remainingSeconds) * 3.6),
           8,
@@ -187,25 +308,49 @@ export default function GoogleCampusMap({
         )
       : 0;
   const etaLabel =
-    remainingSeconds > 0
-      ? `${Math.max(1, Math.ceil(remainingSeconds / 60))} min`
-      : "Arrived";
+    ridePhase === "at_pickup"
+      ? "At pickup"
+      : ridePhase === "arrived"
+        ? "Arrived"
+        : `${Math.max(1, Math.ceil(remainingSeconds / 60))} min`;
   const driverLabel =
     currentRole === "driver" ? "You" : firstName(driverName, "Driver");
   const riderLabel =
     currentRole === "student" ? "You" : firstName(riderName, "Rider");
+  const nearestLocation = getNearestCampusLocation(driverPosition);
+  const driverLocationLabel =
+    nearestLocation.distanceMeters <= 35
+      ? nearestLocation.location.name
+      : `Near ${nearestLocation.location.name}`;
+  const phaseTitle =
+    ridePhase === "approaching_pickup"
+      ? "Driver approaching pickup"
+      : ridePhase === "at_pickup"
+        ? "Driver at pickup"
+        : ridePhase === "in_transit"
+          ? "Trip in progress"
+          : "Destination reached";
   const instruction =
-    progress >= 88
-      ? `Destination ahead: ${dropoff}`
-      : progress >= 56
-        ? `Keep right toward ${dropoff}`
-        : progress >= 20
-          ? "Continue straight on the campus road"
-          : `Head toward ${dropoff}`;
-  const instructionDistance = Math.max(
-    20,
-    Math.round((remainingDistanceMeters * 0.22) / 10) * 10,
-  );
+    ridePhase === "at_pickup"
+      ? `Waiting at ${pickup}`
+      : ridePhase === "arrived"
+        ? `Arrived at ${dropoff}`
+        : legProgress >= 88
+          ? `${ridePhase === "approaching_pickup" ? "Pickup" : "Destination"} ahead: ${targetLabel}`
+          : legProgress >= 56
+            ? `Keep right toward ${targetLabel}`
+            : legProgress >= 20
+              ? `Continue toward ${targetLabel}`
+              : `Head toward ${targetLabel}`;
+  const instructionDistance =
+    remainingDistanceMeters > 0
+      ? Math.max(
+          20,
+          Math.round((remainingDistanceMeters * 0.22) / 10) * 10,
+        )
+      : 0;
+  const showRiderMarker =
+    step !== "active" || ridePhase === "approaching_pickup";
 
   const mapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as
     | string
@@ -230,12 +375,12 @@ export default function GoogleCampusMap({
     const params = new URLSearchParams({
       api: "1",
       origin: `${driverPosition.lat},${driverPosition.lng}`,
-      destination: `${dropoffCoords.lat},${dropoffCoords.lng}`,
+      destination: `${targetCoords.lat},${targetCoords.lng}`,
       travelmode: "driving",
       dir_action: "navigate",
     });
     return `https://www.google.com/maps/dir/?${params}`;
-  }, [driverPosition, dropoffCoords, hasRoute]);
+  }, [driverPosition, hasRoute, targetCoords]);
 
   useEffect(() => {
     const profile = getProfile();
@@ -245,33 +390,25 @@ export default function GoogleCampusMap({
 
   useEffect(() => {
     if (step === "active" && hasRoute) {
-      setProgress(3);
+      setTrackingStartedAt(tripStartedAt ?? Date.now());
+      setClock(Date.now());
       setHasTriggeredArrival(false);
-      return;
-    }
-    if (step === "selecting" && hasRoute) {
-      setProgress(0);
       return;
     }
     if (step === "idle") {
-      setProgress(0);
       setHasTriggeredArrival(false);
     }
-  }, [dropoff, hasRoute, pickup, step]);
+  }, [dropoff, hasRoute, pickup, step, tripStartedAt]);
 
   useEffect(() => {
-    if (step !== "active" || !hasRoute || usesDeviceDriverPosition) return;
-    const interval = window.setInterval(() => {
-      setProgress((current) =>
-        Math.min(100, current + 100 / (Math.max(etaMinutes, 1) * 60)),
-      );
-    }, 1000);
+    if (step !== "active" || !hasRoute) return;
+    const interval = window.setInterval(() => setClock(Date.now()), 1_000);
     return () => window.clearInterval(interval);
-  }, [etaMinutes, hasRoute, step, usesDeviceDriverPosition]);
+  }, [hasRoute, step]);
 
   useEffect(() => {
     if (
-      progress < 100 ||
+      ridePhase !== "arrived" ||
       hasTriggeredArrival ||
       step !== "active" ||
       !onDestinationReached
@@ -281,7 +418,7 @@ export default function GoogleCampusMap({
     setHasTriggeredArrival(true);
     const timeout = window.setTimeout(onDestinationReached, 1200);
     return () => window.clearTimeout(timeout);
-  }, [hasTriggeredArrival, onDestinationReached, progress, step]);
+  }, [hasTriggeredArrival, onDestinationReached, ridePhase, step]);
 
   useEffect(() => {
     if (!hasRoute || (step !== "selecting" && step !== "active")) {
@@ -305,13 +442,53 @@ export default function GoogleCampusMap({
     return () => navigator.geolocation.clearWatch(watchId);
   }, [hasRoute, step]);
 
-  const routePoints = waypoints
+  useEffect(() => {
+    if (step !== "active" || !hasRoute) {
+      onTrackingUpdate?.(null);
+      return;
+    }
+
+    onTrackingUpdate?.({
+      phase: ridePhase,
+      latitude: driverPosition.lat,
+      longitude: driverPosition.lng,
+      locationLabel: driverLocationLabel,
+      targetLabel,
+      remainingDistanceMeters,
+      etaSeconds: remainingSeconds,
+      overallProgress,
+      positionSource: usesDeviceDriverPosition ? "device" : "estimated",
+      updatedAt: clock,
+    });
+  }, [
+    clock,
+    driverLocationLabel,
+    driverPosition.lat,
+    driverPosition.lng,
+    hasRoute,
+    onTrackingUpdate,
+    overallProgress,
+    remainingDistanceMeters,
+    remainingSeconds,
+    ridePhase,
+    step,
+    targetLabel,
+    usesDeviceDriverPosition,
+  ]);
+
+  const approachRoutePoints = approachWaypoints
     .map((point) => {
       const { x, y } = getMapPoint(point);
       return `${x},${y}`;
     })
     .join(" ");
-  const travelledPoints = waypoints
+  const tripRoutePoints = tripWaypoints
+    .map((point) => {
+      const { x, y } = getMapPoint(point);
+      return `${x},${y}`;
+    })
+    .join(" ");
+  const travelledPoints = activeWaypoints
     .slice(0, currentWaypointIndex + 1)
     .map((point) => {
       const { x, y } = getMapPoint(point);
@@ -340,8 +517,34 @@ export default function GoogleCampusMap({
             preserveAspectRatio="none"
             aria-hidden="true"
           >
+            {step === "active" && (
+              <>
+                <polyline
+                  points={approachRoutePoints}
+                  fill="none"
+                  stroke="white"
+                  strokeWidth="2.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  vectorEffect="non-scaling-stroke"
+                />
+                <polyline
+                  points={approachRoutePoints}
+                  fill="none"
+                  stroke={
+                    ridePhase === "approaching_pickup"
+                      ? "#f59e0b"
+                      : "#94a3b8"
+                  }
+                  strokeWidth="1.25"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  vectorEffect="non-scaling-stroke"
+                />
+              </>
+            )}
             <polyline
-              points={routePoints}
+              points={tripRoutePoints}
               fill="none"
               stroke="white"
               strokeWidth="2.6"
@@ -350,7 +553,7 @@ export default function GoogleCampusMap({
               vectorEffect="non-scaling-stroke"
             />
             <polyline
-              points={routePoints}
+              points={tripRoutePoints}
               fill="none"
               stroke="#1677ff"
               strokeWidth="1.25"
@@ -372,7 +575,7 @@ export default function GoogleCampusMap({
           </svg>
         )}
 
-        {hasPickup && (
+        {hasPickup && showRiderMarker && (
           <div
             className="absolute z-20 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center"
             style={{ left: `${riderPoint.x}%`, top: `${riderPoint.y}%` }}
@@ -411,7 +614,17 @@ export default function GoogleCampusMap({
                 {driverLabel}
               </div>
               <div className="absolute top-7 h-14 w-14 animate-pulse rounded-full bg-blue-500/15" />
-              <div className="relative flex h-11 w-11 items-center justify-center rounded-full border-[3px] border-white bg-[#1677ff] text-white shadow-xl">
+              <div
+                className="relative flex h-11 w-11 items-center justify-center rounded-full border-[3px] border-white text-white shadow-xl"
+                style={{
+                  background:
+                    ridePhase === "approaching_pickup"
+                      ? "#f59e0b"
+                      : ridePhase === "arrived"
+                        ? "#16a34a"
+                        : "#1677ff",
+                }}
+              >
                 <Navigation
                   className="h-5 w-5"
                   fill="currentColor"
@@ -436,18 +649,30 @@ export default function GoogleCampusMap({
         <div className="pointer-events-auto max-w-md rounded-lg bg-white shadow-lg">
           {step === "active" && hasRoute ? (
             <div className="flex min-h-20 items-center gap-3 p-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-[#1677ff] text-white">
+              <div
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-white"
+                style={{
+                  background:
+                    ridePhase === "approaching_pickup"
+                      ? "#f59e0b"
+                      : ridePhase === "arrived"
+                        ? "#16a34a"
+                        : "#1677ff",
+                }}
+              >
                 <Navigation className="h-6 w-6" fill="currentColor" />
               </div>
               <div className="min-w-0">
                 <div className="text-xs font-semibold text-blue-600">
-                  In {formatDistance(instructionDistance)}
+                  {instructionDistance > 0
+                    ? `In ${formatDistance(instructionDistance)}`
+                    : phaseTitle}
                 </div>
                 <div className="truncate text-sm font-extrabold text-gray-950 sm:text-base">
                   {instruction}
                 </div>
                 <div className="mt-0.5 truncate text-[11px] text-gray-500">
-                  Following {driverLabel}'s live trip
+                  {driverLocationLabel} · {phaseTitle}
                 </div>
               </div>
             </div>
@@ -468,19 +693,21 @@ export default function GoogleCampusMap({
 
         <div className="pointer-events-auto flex items-center gap-2 self-start">
           <div className="flex h-9 items-center gap-2 rounded-lg bg-white px-3 text-[10px] font-bold text-gray-800 shadow-lg">
-            {gpsStatus === "live" ? (
+            {usesDeviceDriverPosition ? (
               <LocateFixed className="h-3.5 w-3.5 text-emerald-600" />
             ) : gpsStatus === "requesting" ? (
               <Radio className="h-3.5 w-3.5 animate-pulse text-amber-500" />
             ) : (
               <Radio className="h-3.5 w-3.5 text-blue-600" />
             )}
-            {gpsStatus === "live"
-              ? "Device GPS live"
+            {usesDeviceDriverPosition
+              ? "Driver GPS live"
               : gpsStatus === "requesting"
                 ? "Locating"
                 : step === "active"
-                  ? "Trip live"
+                  ? "Driver route live"
+                  : gpsStatus === "live"
+                    ? "Your GPS live"
                   : currentRole === "driver"
                     ? "Driver view"
                     : "Rider view"}
@@ -501,54 +728,15 @@ export default function GoogleCampusMap({
         </div>
       </div>
 
-      <div
-        data-map-control
-        className="absolute right-3 top-1/2 z-40 flex -translate-y-1/2 flex-col gap-1.5"
-      >
-        <button
-          type="button"
-          onClick={() => setZoomLevel((value) => Math.min(2.4, value + 0.2))}
-          aria-label="Zoom in"
-          title="Zoom in"
-          className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-gray-800 shadow-md transition hover:bg-gray-50"
-        >
-          <Plus className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          onClick={() => setZoomLevel((value) => Math.max(0.85, value - 0.2))}
-          aria-label="Zoom out"
-          title="Zoom out"
-          className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-gray-800 shadow-md transition hover:bg-gray-50"
-        >
-          <Minus className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          onClick={resetView}
-          aria-label={isFollowing ? "Recenter map" : "Follow driver"}
-          title={isFollowing ? "Recenter map" : "Follow driver"}
-          className={`flex h-9 w-9 items-center justify-center rounded-lg shadow-md transition ${
-            isFollowing
-              ? "bg-[#1677ff] text-white"
-              : "bg-white text-gray-800 hover:bg-gray-50"
-          }`}
-        >
-          {step === "active" && hasRoute ? (
-            <Crosshair className="h-4 w-4" />
-          ) : (
-            <RotateCcw className="h-4 w-4" />
-          )}
-        </button>
-      </div>
-
       {step === "active" && hasRoute && (
         <div className="pointer-events-none absolute bottom-3 left-3 right-14 z-40 flex justify-center">
           <div className="pointer-events-auto grid w-full max-w-xl grid-cols-3 divide-x divide-gray-100 rounded-lg bg-white p-3 shadow-xl">
             <div className="flex items-center justify-center gap-2 px-2">
               <RouteIcon className="hidden h-4 w-4 text-emerald-600 sm:block" />
               <div className="min-w-0 text-center sm:text-left">
-                <div className="text-[9px] font-bold uppercase text-gray-400">ETA</div>
+                <div className="text-[9px] font-bold uppercase text-gray-400">
+                  {ridePhase === "approaching_pickup" ? "Pickup ETA" : "ETA"}
+                </div>
                 <div className="truncate text-sm font-extrabold text-gray-950 sm:text-base">{etaLabel}</div>
               </div>
             </div>
@@ -586,14 +774,16 @@ export default function GoogleCampusMap({
                 {currentRole === "driver" ? riderName : driverName || "Assigned driver"}
               </div>
               <div className="max-w-40 truncate text-[10px] text-white/60">
-                {currentRole === "driver" ? `Pickup: ${pickup}` : vehicleType}
+                {currentRole === "driver"
+                  ? `Pickup: ${pickup}`
+                  : `${vehicleType} · ${driverLocationLabel}`}
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {progress >= 100 && step === "active" && (
+      {ridePhase === "arrived" && step === "active" && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-lg bg-white p-6 text-center shadow-2xl">
             <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">

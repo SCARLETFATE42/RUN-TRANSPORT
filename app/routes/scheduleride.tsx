@@ -1,5 +1,13 @@
 import { useState, useEffect } from "react";
 import { LOCATIONS } from "../data/mockData";
+import {
+  cancelScheduledRide,
+  createScheduledRide,
+  getScheduledRideTimestamp,
+  getScheduledRides,
+  subscribeToScheduledRides,
+  type ScheduledRide,
+} from "../data/scheduledRideStore";
 import type { Route } from "./+types/scheduleride";
 import Navbar from "./navbar";
 
@@ -13,33 +21,11 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
-interface ScheduledRide {
-  id: string;
-  date: string;
-  time: string;
-  pickup: string;
-  dropoff: string;
-  reason: string;
-  approval: string;
-  createdAt: number;
-}
-
-const STORAGE_KEY = "runcampus_scheduled_rides";
-
-function loadSchedules(): ScheduledRide[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    const parsed = raw ? (JSON.parse(raw) as unknown) : [];
-    return Array.isArray(parsed) ? (parsed as ScheduledRide[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveSchedules(rides: ScheduledRide[]) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(rides));
+function getLocalDateInputValue(date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function formatDate(dateStr: string): string {
@@ -63,19 +49,27 @@ function formatTime(timeStr: string): string {
   return `${hour}:${m.toString().padStart(2, "0")} ${suffix}`;
 }
 
-function getStatusLabel(dateStr: string): string {
+function getStatusLabel(
+  dateStr: string,
+  timeStr: string,
+  currentTimestamp: number,
+): string {
+  const scheduledFor = getScheduledRideTimestamp(dateStr, timeStr);
+  if (scheduledFor === null) return "Invalid time";
+  if (scheduledFor <= currentTimestamp) return "Booking now";
+
   const d = new Date(dateStr + "T00:00:00");
-  const today = new Date();
+  const today = new Date(currentTimestamp);
   today.setHours(0, 0, 0, 0);
   const diff = Math.round((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-  if (diff === 0) return "⏰ Today";
-  if (diff === 1) return "📅 Tomorrow";
-  if (diff > 1) return `📅 In ${diff} days`;
-  return "⏳ Past";
+  if (diff === 0) return "Today";
+  if (diff === 1) return "Tomorrow";
+  if (diff > 1) return `In ${diff} days`;
+  return "Booking now";
 }
 
 export default function ScheduleRide() {
-  const today = new Date().toISOString().split("T")[0];
+  const today = getLocalDateInputValue();
 
   const [date, setDate] = useState(today);
   const [time, setTime] = useState("14:30");
@@ -84,12 +78,27 @@ export default function ScheduleRide() {
   const [reason, setReason] = useState("");
   const [approval, setApproval] = useState("No, on-campus only");
   const [schedules, setSchedules] = useState<ScheduledRide[]>([]);
-  const [toast, setToast] = useState(false);
+  const [toast, setToast] = useState("");
   const [error, setError] = useState("");
+  const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
-    setSchedules(loadSchedules());
+    const refreshSchedules = () => setSchedules(getScheduledRides());
+    refreshSchedules();
+
+    const unsubscribe = subscribeToScheduledRides(refreshSchedules);
+    const clock = window.setInterval(() => setNow(Date.now()), 15_000);
+    return () => {
+      unsubscribe();
+      window.clearInterval(clock);
+    };
   }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = window.setTimeout(() => setToast(""), 4_000);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
 
   function handleSubmit() {
     setError("");
@@ -98,25 +107,25 @@ export default function ScheduleRide() {
       setError("Please fill in the date and time.");
       return;
     }
+    const scheduledFor = getScheduledRideTimestamp(date, time);
+    if (scheduledFor === null || scheduledFor <= Date.now()) {
+      setError("Choose a date and time in the future.");
+      return;
+    }
     if (pickup === dropoff) {
       setError("Pickup and drop-off must be different.");
       return;
     }
 
-    const newRide: ScheduledRide = {
-      id: `sr_${Date.now()}`,
+    createScheduledRide({
       date,
       time,
       pickup,
       dropoff,
       reason,
       approval,
-      createdAt: Date.now(),
-    };
-
-    const updated = [newRide, ...schedules];
-    setSchedules(updated);
-    saveSchedules(updated);
+    });
+    setSchedules(getScheduledRides());
 
     // Reset form
     setDate(today);
@@ -126,15 +135,12 @@ export default function ScheduleRide() {
     setReason("");
     setApproval("No, on-campus only");
 
-    // Show toast
-    setToast(true);
-    setTimeout(() => setToast(false), 3000);
+    setToast(`Ride scheduled for ${formatDate(date)} at ${formatTime(time)}.`);
   }
 
   function handleCancel(id: string) {
-    const updated = schedules.filter((s) => s.id !== id);
-    setSchedules(updated);
-    saveSchedules(updated);
+    cancelScheduledRide(id);
+    setSchedules(getScheduledRides());
   }
 
   return (
@@ -163,11 +169,12 @@ export default function ScheduleRide() {
             fontWeight: 600,
             zIndex: 9999,
             boxShadow: "0 4px 24px rgba(0,0,0,0.35)",
-            whiteSpace: "nowrap",
+            maxWidth: "calc(100vw - 32px)",
+            textAlign: "center",
             animation: "fadeInUp 0.3s ease",
           }}
         >
-          ✅ Ride scheduled successfully!
+          {toast} It will book automatically at that time.
         </div>
       )}
 
@@ -392,7 +399,7 @@ export default function ScheduleRide() {
                       </div>
                       <div className="flex flex-col items-end gap-2 shrink-0">
                         <span className="text-xs px-2.5 py-1 rounded-full status-scheduled">
-                          {getStatusLabel(ride.date)}
+                          {getStatusLabel(ride.date, ride.time, now)}
                         </span>
                         <button
                           onClick={() => handleCancel(ride.id)}
