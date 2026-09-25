@@ -244,40 +244,17 @@ export default function GoogleCampusMap({
   }, []);
 
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    const measure = () =>
-      setViewportSize({
-        width: container.clientWidth,
-        height: container.clientHeight,
-      });
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(container);
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
     if (step === "active" && hasRoute) {
       setProgress(3);
-      setZoomLevel(1.72);
-      setPanOffset({ x: 0, y: 0 });
-      setIsFollowing(true);
       setHasTriggeredArrival(false);
       return;
     }
     if (step === "selecting" && hasRoute) {
       setProgress(0);
-      setZoomLevel(1.22);
-      setPanOffset({ x: 0, y: 0 });
-      setIsFollowing(false);
       return;
     }
     if (step === "idle") {
       setProgress(0);
-      setZoomLevel(1);
-      setPanOffset({ x: 0, y: 0 });
-      setIsFollowing(false);
       setHasTriggeredArrival(false);
     }
   }, [dropoff, hasRoute, pickup, step]);
@@ -328,61 +305,6 @@ export default function GoogleCampusMap({
     return () => navigator.geolocation.clearWatch(watchId);
   }, [hasRoute, step]);
 
-  const followedOffset = useMemo(() => {
-    if (
-      !isFollowing ||
-      !hasRoute ||
-      viewportSize.width === 0 ||
-      viewportSize.height === 0
-    ) {
-      return panOffset;
-    }
-    const pointX = (driverPoint.x / 100) * viewportSize.width;
-    const pointY = (driverPoint.y / 100) * viewportSize.height;
-    const scaledX =
-      viewportSize.width / 2 +
-      zoomLevel * (pointX - viewportSize.width / 2);
-    const scaledY =
-      viewportSize.height / 2 +
-      zoomLevel * (pointY - viewportSize.height / 2);
-    return {
-      x: viewportSize.width * 0.5 - scaledX,
-      y: viewportSize.height * 0.58 - scaledY,
-    };
-  }, [
-    driverPoint.x,
-    driverPoint.y,
-    hasRoute,
-    isFollowing,
-    panOffset,
-    viewportSize.height,
-    viewportSize.width,
-    zoomLevel,
-  ]);
-
-  const handleMouseDown = (event: MouseEvent<HTMLDivElement>) => {
-    const target = event.target as HTMLElement;
-    if (target.closest("[data-map-control]")) return;
-    setIsFollowing(false);
-    setIsDragging(true);
-    dragStartRef.current = {
-      x: event.clientX - followedOffset.x,
-      y: event.clientY - followedOffset.y,
-    };
-  };
-  const handleMouseMove = (event: MouseEvent<HTMLDivElement>) => {
-    if (!isDragging) return;
-    setPanOffset({
-      x: event.clientX - dragStartRef.current.x,
-      y: event.clientY - dragStartRef.current.y,
-    });
-  };
-  const resetView = () => {
-    setPanOffset({ x: 0, y: 0 });
-    setZoomLevel(step === "active" && hasRoute ? 1.72 : hasRoute ? 1.22 : 1);
-    setIsFollowing(step === "active" && hasRoute);
-  };
-
   const routePoints = waypoints
     .map((point) => {
       const { x, y } = getMapPoint(point);
@@ -398,22 +320,8 @@ export default function GoogleCampusMap({
     .join(" ");
 
   return (
-    <div
-      ref={containerRef}
-      className="relative h-full w-full select-none overflow-hidden bg-[#e8ecef]"
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={() => setIsDragging(false)}
-      onMouseLeave={() => setIsDragging(false)}
-    >
-      <div
-        className={`absolute inset-0 ${isDragging ? "cursor-grabbing" : "cursor-grab"}`}
-        style={{
-          transform: `translate(${followedOffset.x}px, ${followedOffset.y}px) scale(${zoomLevel})`,
-          transformOrigin: "center",
-          transition: isDragging ? "none" : "transform 500ms ease",
-        }}
-      >
+    <div className="relative h-full w-full select-none overflow-hidden bg-[#e8ecef]">
+      <div className="absolute inset-0">
         <iframe
           key={mapSource}
           title="Redeemer's University live Google map"
